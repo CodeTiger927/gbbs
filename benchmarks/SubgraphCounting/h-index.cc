@@ -1,5 +1,3 @@
-using namespace std;
-
 #include "h-index.h"
 
 int main() {

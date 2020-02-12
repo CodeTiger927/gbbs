@@ -1,8 +1,6 @@
 #include <iostream>
 #include <map>
 #include <set>
-#include "pbbslib/sample_sort.h"
-#include "pbbslib/monoid.h"
 #include "ligra/ligra.h"
 
 struct HSet {
@@ -11,7 +9,7 @@ struct HSet {
 	std::set<int> H;
 	std::map<int,int> F;
 	std::set<int> B;
-	std::map<int,set<int>> C;
+	std::map<int,std::set<int>> C;
 
 	int insert(int e,int x) {
 		F[x] = e;
@@ -22,7 +20,7 @@ struct HSet {
 			if(B.size() == 0) {
 				if(C[H.size() - 1].size() == 0) {
 					B = C[H.size()];
-					C[H.size()] = set<int>();
+					C[H.size()] = std::set<int>();
 				}
 			}else{
 				int cur = *(B.begin());
@@ -45,7 +43,7 @@ struct HSet {
 			H.erase(e);
 			if(C[H.size() + 1].size() == 0) {
 				C[H.size() + 1] = B;
-				B = set<int>();
+				B = std::set<int>();
 			}else{
 				int cur = *(C[H.size() + 1].begin());
 				C[H.size() + 1].erase(cur);
