@@ -1,18 +1,18 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <limits>
 #include "ligra/ligra.h"
+#include "ligra/pbbslib/sparse_table.h"
 
 struct HSet {
 	std::set<int> S;
-	std::map<int,int> f;
+	int f[1000];
 	std::set<int> H;
-	std::map<int,int> F;
 	std::set<int> B;
-	std::map<int,std::set<int>> C;
+	std::set<int> C[1000];
 
 	int insert(int e,int x) {
-		F[x] = e;
 		f[e] = x;
 		C[x].insert(e);
 		if(x > H.size()) {
@@ -33,7 +33,6 @@ struct HSet {
 	}
 	
 	int erase(int e) {
-		F.erase(e);
 		if(B.find(e) != B.end()) {
 			B.erase(e);
 		}else{

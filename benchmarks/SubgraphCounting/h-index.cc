@@ -12,5 +12,6 @@ int main() {
 	cout << h.insert(2,4) << endl;
 	cout << h.change(2,3) << endl;
 	cout << h.change(2,4) << endl;
+
 	return 0;
 }
