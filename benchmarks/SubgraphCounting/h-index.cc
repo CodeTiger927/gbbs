@@ -1,7 +1,16 @@
 #include "h-index.h"
 
+#include <math.h>
+#include <fstream>
+
 int main() {
 
+  // TODO: use integrated ligra main
+	// e.g.,
+	//template <class Graph>
+  //double AppKCore_runner(Graph& GA, commandLine P) {
+  //}
+	//generate_symmetric_main(AppKCore_runner, false);
 	graph G;
 
 
