@@ -1,17 +1,24 @@
 #include "h-index.h"
 
 int main() {
-	HSet h;
-	cout << h.insert(1,4) << endl;
-	cout << h.insert(2,3) << endl;
-	cout << h.insert(3,4) << endl;
-	cout << h.insert(4,4) << endl;
-	cout << h.erase(2) << endl;
-	cout << h.insert(2,4) << endl;
-	cout << h.erase(2) << endl;
-	cout << h.insert(2,4) << endl;
-	cout << h.change(2,3) << endl;
-	cout << h.change(2,4) << endl;
+
+	graph G;
+
+
+	G.insertV(0);
+	G.insertV(1);
+	G.insertV(2);
+	G.insertV(3);
+	cout << G.connect(0,1) << endl;
+	cout << G.connect(0,2) << endl;
+	cout << G.connect(0,3) << endl;
+	cout << G.connect(1,2) << endl;
+	cout << G.connect(1,3) << endl;
+	cout << G.connect(2,3) << endl;
+
+
+
+
 
 	return 0;
 }

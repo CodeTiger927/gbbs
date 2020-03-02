@@ -2,19 +2,32 @@
 #include <map>
 #include <set>
 #include <limits>
+#include <vector>
 #include "ligra/ligra.h"
 #include "ligra/pbbslib/sparse_table.h"
+#include "pbbslib/hash_table.h"
 
 struct HSet {
-	std::set<int> S;
 	int f[1000];
 	std::set<int> H;
+	std::set<int> P;
 	std::set<int> B;
+	// A set to maintain H
 	std::set<int> C[1000];
+
+	int inc(int e) {
+		return change(e,f[e] + 1);
+	}
+
+	int dec(int e){
+		if(f[e] == 0) return H.size();
+		return change(e,f[e] - 1);
+	}
 
 	int insert(int e,int x) {
 		f[e] = x;
 		C[x].insert(e);
+
 		if(x > H.size()) {
 			H.insert(e);
 			if(B.size() == 0) {
@@ -29,6 +42,7 @@ struct HSet {
 				C[H.size()].insert(cur);
 			}
 		}
+
 		return H.size();
 	}
 	
@@ -59,3 +73,39 @@ struct HSet {
 	}
 };
 
+
+struct graph {
+	public:
+		HSet h;
+		std::vector<int> edges[1000];
+		std::vector<int> hedges[100][100];
+
+		int triangles = 0;
+
+		graph() {
+
+		}
+
+		void insertV(int v) {
+			h.insert(v,0);
+		}
+
+		int connect(int v,int u) {
+			h.inc(v);
+			h.inc(u);
+
+			triangles += hedges[u][v].size();
+			for(int i = 0;i < edges[u].size();i++) {
+				hedges[v][edges[u][i]].push_back(u);
+				hedges[edges[u][i]][v].push_back(u);
+			}
+			for(int i = 0;i < edges[v].size();i++) {
+				hedges[u][edges[v][i]].push_back(v);
+				hedges[edges[v][i]][u].push_back(v);
+			}
+			edges[v].push_back(u);
+			edges[u].push_back(v);
+
+			return this -> triangles;
+		}
+};
