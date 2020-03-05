@@ -25,12 +25,28 @@ std::function<void()> get_deletion_fn(void*, void*, void*, void*);
  * which is just a tuple<uintE, W>.*/
 
 
-struct vertex {
-  
+// currently this is using CSR so I need to change this into sparse table
+
+struct vertex_data {
+  size_t offset; // offset into edges
+  uintE degree;  // vertex degree
+};
+
+
+// This is just the vertex class itself
+
+template <class W>
+struct symmetric_vertex<W> {
+  using vertex = symmetric_vertex<W>;
+  using edge_type = std::tuple<uintE, W>;
+
+  edge_type* neighbor;
+  uintE degree;
+
+  symmetric_vertex(edge_type* n, vertex_data& vdata) {
+    neighbor = (n + vdata.offset);
+  }
 }
-
-
-
 
 
 
