@@ -10,6 +10,9 @@
 #include "flags.h"
 #include "vertex.h"
 
+#include "pbbslib/sequence_ops.h"
+#include "macros.h"
+
 std::function<void()> get_deletion_fn(void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*, void*);
@@ -20,6 +23,20 @@ std::function<void()> get_deletion_fn(void*, void*, void*, void*);
  * 2) W: the weight template
  * The graph is represented as an array of edges of type vertex_type::edge_type,
  * which is just a tuple<uintE, W>.*/
+
+
+struct vertex {
+  
+}
+
+
+
+
+
+
+
+
+
 template <template <class W> class vertex_type, class W>
 struct symmetric_graph {
   using vertex = vertex_type<W>;
