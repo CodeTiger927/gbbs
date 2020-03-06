@@ -4,7 +4,7 @@
 #include <limits>
 #include <vector>
 #include "ligra/ligra.h"
-#include "symetric_graph.h"
+#include "dynamic_symmetric_graph.h"
 #include "ligra/pbbslib/sparse_table.h"
 #include "pbbslib/hash_table.h"
 
