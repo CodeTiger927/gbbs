@@ -4,14 +4,11 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
-
-#include "bridge.h"
-#include "compressed_vertex.h"
-#include "flags.h"
-#include "vertex.h"
+#include <limits>
 
 #include "pbbslib/sequence_ops.h"
-#include "macros.h"
+
+#include "ligra/pbbslib/sparse_table.h"
 
 std::function<void()> get_deletion_fn(void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*);
@@ -27,7 +24,7 @@ std::function<void()> get_deletion_fn(void*, void*, void*, void*);
 
 // currently this is using CSR so I need to change this into sparse table
 
-struct vertex_data {
+struct dynamic_vertex_data {
   size_t offset; // offset into edges
   uintE degree;  // vertex degree
 };
@@ -36,30 +33,52 @@ struct vertex_data {
 // This is just the vertex class itself
 
 template <class W>
-struct symmetric_vertex<W> {
-  using vertex = symmetric_vertex<W>;
+struct dynamic_symmetric_vertex {
+  using vertex = dynamic_symmetric_vertex<W>;
   using edge_type = std::tuple<uintE, W>;
 
   edge_type* neighbor;
   uintE degree;
+  sparse_table<uintE,bool,uintE> neighbors = make_sparse_table<uintE,bool,uintE>(1000,std::make_tuple(UINT_E_MAX,false),pbbs:hash64_2);
 
-  symmetric_vertex(edge_type* n, vertex_data& vdata) {
+
+  dynamic_symmetric_vertex(edge_type* n, dynamic_vertex_data& vdata) {
     neighbor = (n + vdata.offset);
+    degree = vdata.degree;
   }
+
+  // will be deleted, just for testing
+  dyanmic_symmetric_vertex() {
+
+  }
+
+  void clear() { pbbslib::free_array(neighbors); }
+
+
+  edge_type* getInNeighbors() { return neighbors; }
+  edge_type* getOutNeighbors() { return neighbors; }
+  uintE getInNeighbor(uintE j) { return std::get<0>(neighbors[j]); }
+  uintE getOutNeighbor(uintE j) { return std::get<0>(neighbors[j]); }
+  W getInWeight(uintE j) { return std::get<1>(neighbors[j]); }
+  W getOutWeight(uintE j) { return std::get<1>(neighbors[j]); }
+
+  uintE getInDegree() { return degree; }
+  uintE getOutDegree() { return degree; }
+  uintE getInVirtualDegree() { return degree; }
+  uintE getOutVirtualDegree() { return degree; }
+
 }
 
 
 
 
-
-
 template <template <class W> class vertex_type, class W>
-struct symmetric_graph {
+struct dynamic_symmetric_graph {
   using vertex = vertex_type<W>;
   using weight_type = W;
   using edge_type = typename vertex::edge_type;
 
-  vertex_data* v_data;
+  dynamic_vertex_data* v_data;
 
   /* Pointer to edges */
   edge_type* e0;
@@ -74,7 +93,7 @@ struct symmetric_graph {
   /* called to delete the graph */
   std::function<void()> deletion_fn;
 
-symmetric_graph(vertex_data* v_data, size_t n, size_t m,
+dynamic_symmetric_graph(dynamic_vertex_data* v_data, size_t n, size_t m,
     std::function<void()> _deletion_fn, edge_type* _e0, edge_type* _e1=nullptr)
       : v_data(v_data),
         e0(_e0),
@@ -154,102 +173,8 @@ symmetric_graph(vertex_data* v_data, size_t n, size_t m,
   }
 };
 
-/* Compressed Sparse Row (CSR) based representation for asymmetric
- * graphs.  Note that the symmetric/asymmetric structures are pretty
- * similar, but defined separately. The purpose is to try and avoid
- * errors where an algorithm intended for symmetric graphs (e.g.,
- * biconnectivity) is not mistakenly called on a directed graph.
- *
- * Takes two template parameters:
- * 1) vertex_type: vertex template, parametrized by the weight type
- *    associated with each edge
- * 2) W: the weight template
- *
- * The graph is represented as an array of edges of type
- * vertex_type::edge_type, which is just a pair<uintE, W>.
- * */
-template <template <class W> class vertex_type, class W>
-struct asymmetric_graph {
-  using vertex = vertex_type<W>;
-  using weight_type = W;
-  using edge_type = typename vertex::edge_type;
 
-  /* number of vertices in G */
-  size_t n;
-  /* number of edges in G */
-  size_t m;
-  /* called to delete the graph */
-  std::function<void()> deletion_fn;
 
-  vertex_data* v_out_data;
-  vertex_data* v_in_data;
-
-  /* Pointer to out-edges */
-  edge_type* out_edges_0;
-  /* Pointer to second copy of out-edges--relevant if using 2-socket NVM */
-  edge_type* out_edges_1;
-
-  /* Pointer to in-edges */
-  edge_type* in_edges_0;
-  /* Pointer to second copy of in-edges--relevant if using 2-socket NVM */
-  edge_type* in_edges_1;
-
-#ifndef TWOSOCKETNVM
-  vertex get_vertex(size_t i) {
-    return vertex(out_edges_0, v_out_data[i], in_edges_0, v_in_data[i]);
-  }
-#else
-  vertex get_vertex(size_t i) {
-    if (numanode() == 0) {
-      return vertex(out_edges_0, v_out_data[i], in_edges_0, v_in_data[i]);
-    } else {
-      return vertex(out_edges_1, v_out_data[i], in_edges_1, v_in_data[i]);
-    }
-  }
-#endif
-
-  asymmetric_graph(vertex_data* v_out_data,
-      vertex_data* v_in_data,
-      size_t n,
-      size_t m,
-      std::function<void()> _deletion_fn,
-      edge_type* _out_edges_0,
-      edge_type* _in_edges_0,
-      edge_type* _out_edges_1=nullptr,
-      edge_type* _in_edges_1=nullptr) :
-    n(n),
-    m(m),
-    deletion_fn(_deletion_fn),
-    v_out_data(v_out_data),
-    v_in_data(v_in_data),
-    out_edges_0(_out_edges_0),
-    out_edges_1(_out_edges_1),
-    in_edges_0(_in_edges_0),
-    in_edges_1(_in_edges_1) {}
-
-  void del() {
-    deletion_fn();
-  }
-
-  template <class F>
-  void map_edges(F f, bool parallel_inner_map = true) {
-    parallel_for(0, n, [&](size_t i) {
-      get_vertex(i).mapOutNgh(i, f, parallel_inner_map);
-    }, 1);
-  }
-
-  /* degree must be <= old_degree */
-  void decrease_out_degree(uintE i, uintE degree) {
-    /* currently unimplemented --- implement when needed */
-    assert(false); exit(0);
-  }
-
-  /* degree must be <= old_degree */
-  void decrease_in_degree(uintE i, uintE degree) {
-    /* currently unimplemented --- implement when needed */
-    assert(false); exit(0);
-  }
-};
 
 // Edge Array Representation
 template <class W>
@@ -351,29 +276,29 @@ inline edge_array<W> to_edge_array(Graph& G) {
 //   auto get_w = [&] (const edge& e) { return std::get<2>(e); };
 //   auto G = sym_graph_from_edges<W>(coo1, get_u, get_v, get_w, 10, false);
 template <class W, class EdgeSeq, class GetU, class GetV, class GetW>
-inline symmetric_graph<symmetric_vertex, W> sym_graph_from_edges(
+inline dynamic_symmetric_graph<dynamic_symmetric_vertex, W> sym_graph_from_edges(
     EdgeSeq& A,
     size_t n,
     GetU&& get_u,
     GetV&& get_v,
     GetW&& get_w,
     bool is_sorted = false) {
-  using vertex = symmetric_vertex<W>;
+  using vertex = dynamic_symmetric_vertex<W>;
   using edge_type = typename vertex::edge_type;
   size_t m = A.size();
 
   if (m == 0) {
     if (n == 0) {
       std::function<void()> del = []() {};
-      return symmetric_graph<symmetric_vertex, W>(nullptr, 0, 0, del, nullptr);
+      return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(nullptr, 0, 0, del, nullptr);
     } else {
-      auto v_data = pbbs::new_array_no_init<vertex_data>(n);
+      auto v_data = pbbs::new_array_no_init<dynamic_vertex_data>(n);
       par_for(0, n, pbbslib::kSequentialForThreshold, [&] (size_t i) {
         v_data[i].offset = 0;
         v_data[i].degree = 0;
       });
       std::function<void()> del = get_deletion_fn(v_data, nullptr);
-      return symmetric_graph<symmetric_vertex, W>(v_data, n, 0, del, nullptr);
+      return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(v_data, n, 0, del, nullptr);
     }
   }
 
@@ -420,18 +345,18 @@ inline symmetric_graph<symmetric_vertex, W> sym_graph_from_edges(
 //  });
 //  return graph<V>(v, n, m, get_deletion_fn(v, edges.to_array()));
 
-  auto v_data = pbbs::new_array_no_init<vertex_data>(n);
+  auto v_data = pbbs::new_array_no_init<dynamic_vertex_data>(n);
   par_for(0, n, pbbslib::kSequentialForThreshold, [&] (size_t i) {
     uintT o = starts[i];
     v_data[i].offset = o;
     v_data[i].degree = (uintE)(((i == (n-1)) ? m : starts[i+1]) - o);
   });
   auto new_edge_arr = edges.to_array();
-  return symmetric_graph<symmetric_vertex, W>(v_data, n, m, get_deletion_fn(v_data, new_edge_arr), (edge_type*)new_edge_arr);
+  return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(v_data, n, m, get_deletion_fn(v_data, new_edge_arr), (edge_type*)new_edge_arr);
 }
 
 template <class W>
-inline symmetric_graph<symmetric_vertex, W> sym_graph_from_edges(
+inline dynamic_symmetric_graph<dynamic_symmetric_vertex, W> sym_graph_from_edges(
     pbbs::sequence<std::tuple<uintE, uintE, W>>& A,
     size_t n,
     bool is_sorted = false) {
