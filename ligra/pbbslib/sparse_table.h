@@ -32,7 +32,8 @@ class sparse_table {
  public:
   using T = std::tuple<K, V>;
 
-  size_t m;
+  size_t m; // capacity
+  size_t size; // Stored values
   size_t mask;
   T empty;
   K empty_key;
@@ -40,8 +41,12 @@ class sparse_table {
   bool alloc;
   KeyHash key_hash;
 
-  size_t size() {
+  size_t capacity() {
     return m;
+  }
+
+  size_t sizeOf() {
+    return size;
   }
 
   static void clearA(T* A, long n, T kv) {
@@ -103,6 +108,7 @@ class sparse_table {
   sparse_table(size_t _m, T _empty, KeyHash _key_hash, T* _tab, bool clear=true)
       : m(_m),
         mask(m - 1),
+	size(0),
         table(_tab),
         empty(_empty),
         empty_key(std::get<0>(empty)),
@@ -131,6 +137,7 @@ class sparse_table {
       if (std::get<0>(table[h]) == empty_key) {
         if (pbbslib::CAS(&std::get<0>(table[h]), empty_key, k)) {
           std::get<1>(table[h]) = std::get<1>(kv);
+          size++;
           return true;
         }
       }
@@ -244,6 +251,26 @@ class sparse_table {
     return default_value;
   }
 
+  std::tuple<K, V> erase(K k) { // Assumes that k is in sparse_table
+    
+    size_t index = idx(k);
+    table[index] = empty;
+    size--;
+  }
+
+  typename std::set<K>::iterator begin() { // Returns iterator of a set of all non-empty elements in RANDOM ORDER
+    //Parallel iterates through table and adds it to set in O(1)
+    //Like filter but does not care about order
+    std::set<K> nonEmpty;
+    par_for(0, m, [&] (size_t i) {
+
+      if (std::get<0>(table[i]) != empty_key) {
+        nonEmpty.insert(std::get<0>(table[i])); //Stores key only because C++ does not allow inserting tuples into sets
+      }
+    });
+    return nonEmpty.begin();
+  }
+
   sequence<T> entries() {
     auto pred = [&](T& t) { return std::get<0>(t) != empty_key; };
     auto table_seq = pbbslib::make_sequence<T>(table, m);
@@ -252,6 +279,7 @@ class sparse_table {
 
   void clear() {
     par_for(0, m, 2048, [&] (size_t i) { table[i] = empty; });
+    size = 0;
   }
 };
 
