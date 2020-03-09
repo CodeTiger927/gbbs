@@ -1,8 +1,5 @@
 #include "h-index.h"
 
-#include <math.h>
-#include <fstream>
-
 int main() {
 
   // TODO: use integrated ligra main
@@ -42,11 +39,5 @@ int main() {
   cout << G.connect(1,3) << endl;
   cout << G.connect(2,3) << endl;
 
-
-
-
-
-
-
-	return 0;
+  return 0;
 }
