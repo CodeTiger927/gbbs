@@ -45,6 +45,7 @@ class sparse_table {
     return m;
   }
 
+  // TODO: why did you make this? You could just call table_name.size if you wanted the size
   size_t sizeOf() {
     return size;
   }
@@ -137,6 +138,7 @@ class sparse_table {
       if (std::get<0>(table[h]) == empty_key) {
         if (pbbslib::CAS(&std::get<0>(table[h]), empty_key, k)) {
           std::get<1>(table[h]) = std::get<1>(kv);
+          // TODO: this is wrong. You're going to get errors when you run this in parallel.
           size++;
           return true;
         }
