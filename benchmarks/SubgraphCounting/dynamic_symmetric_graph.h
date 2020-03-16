@@ -12,6 +12,30 @@
 
 #include "ligra/pbbslib/dyn_arr.h"
 
+
+
+// General Comment and TODO (From Alex):
+// After coding the Symmetric Graph Class. I cannot help but notice that the vertex class is
+// pretty useless since all of its functionality can be easily replaced by directly using
+// vertex data, and due to the nature of sparse_table, I have to create a entries dyn_arr
+// every time we initialize a vertex, which is like O(N) at first, so maybe I should somehow
+// remove vertex or integrate the entries dyn_arr into vertex_data.
+
+
+
+template <template <typename W> class vertex, class W, class F>
+inline void mapNghs(vertex<W>* v, uintE vtx_id, std::tuple<uintE, W>* nghs,
+                    uintE d, F& f, bool parallel) {
+  par_for(0, d, pbbslib::kSequentialForThreshold, [&] (size_t j) {
+    uintE ngh = v->getOutNeighbor(j);
+    f(vtx_id, ngh, v->getOutWeight(j));
+  }, parallel);
+}
+
+
+
+
+
 std::function<void()> get_deletion_fn(void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*, void*);
@@ -44,6 +68,7 @@ struct dynamic_vertex_data {
 
 // This is just the vertex class itself
 
+
 template <class W>
 struct dynamic_symmetric_vertex {
   using vertex = dynamic_symmetric_vertex<W>;
@@ -68,7 +93,7 @@ struct dynamic_symmetric_vertex {
 
   // Testing, can be deleted later
   dynamic_symmetric_vertex() {
-
+    degree = 0;
   }
 
 
@@ -87,104 +112,138 @@ struct dynamic_symmetric_vertex {
   uintE getInVirtualDegree() { return degree; }
   uintE getOutVirtualDegree() { return degree; }
 
+  template <class F>
+  inline void mapOutNgh(uintE vtx_id, F& f, bool parallel = true) {
+    mapNghs<dynamic_symmetric_vertex, W, F>(this, vtx_id, getOutNeighbors(),
+                                               getOutDegree(), f, parallel);
+  }
+
+  template <class F>
+  inline void mapInNgh(uintE vtx_id, F& f, bool parallel = true) {
+    mapNghs<dynamic_symmetric_vertex, W, F>(this, vtx_id, getInNeighbors(),
+                                               getOutDegree(), f, parallel);
+  }
+
 };
 
 
 
 
-// template <template <class W> class vertex_type, class W>
-// struct dynamic_symmetric_graph {
-//   using vertex = vertex_type<W>;
-//   using weight_type = W;
-//   using edge_type = typename vertex::edge_type;
+template <template <class W> class vertex_type, class W>
+struct dynamic_symmetric_graph {
+  using vertex = vertex_type<W>;
+  using weight_type = W;
+  using edge_type = typename vertex::edge_type;
 
-//   dynamic_vertex_data* v_data;
+  pbbslib::dyn_arr<dynamic_vertex_data> v_data;
 
-//   /* Pointer to edges */
-//   edge_type* e0;
-//   /* Pointer to second copy of edges--relevant if using 2-socket NVM */
-//   edge_type* e1;
 
-//   /* number of vertices in G */
-//   size_t n;
-//   /* number of edges in G */
-//   size_t m;
+  /* number of vertices in G */
+  size_t n;
+  /* number of edges in G */
+  size_t m;
 
-//   /* called to delete the graph */
-//   std::function<void()> deletion_fn;
+  /* called to delete the graph */
+  std::function<void()> deletion_fn;
 
-// dynamic_symmetric_graph(dynamic_vertex_data* v_data, size_t n, size_t m,
-//     std::function<void()> _deletion_fn, edge_type* _e0, edge_type* _e1=nullptr)
-//       : v_data(v_data),
-//         e0(_e0),
-//         e1(_e1),
-//         n(n),
-//         m(m),
-//         deletion_fn(_deletion_fn) {
-//     if (_e1 == nullptr) {
-//       e1 = e0; // handles NVM case when graph is stored in symmetric memory
-//     }
-//   }
+dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, size_t m,
+    std::function<void()> _deletion_fn)
+      : v_data(v_data),
+        n(n),
+        m(m),
+        deletion_fn(_deletion_fn) {
+  }
 
-//   void del() {
-//     deletion_fn();
-//   }
+  void del() {
+    deletion_fn();
+  }
+
+  vertex get_vertex(uintE i) {
+    return vertex(v_data.A[i]);
+  }
 
 // #ifndef TWOSOCKETNVM
 //   vertex get_vertex(uintE i) {
-//     return vertex(e0, v_data[i]);
+//     return vertex(v_data[i]);
 //   }
 // #else
 //   vertex get_vertex(uintE i) {
 //     if (numanode() == 0) {
-//       return vertex(e0, v_data[i]);
+//       return vertex(v_data[i]);
 //     } else {
-//       return vertex(e1, v_data[i]);
+//       return vertex(v_data[i]);
 //     }
 //   }
 // #endif
 
-//   /* degree must be <= old_degree */
-//   void decrease_vertex_degree(uintE id, uintE degree) {
-//     assert(degree <= v_data[id].degree);
-//     v_data[id].degree = degree;
-//   }
+  /* degree must be <= old_degree */
+  void decrease_vertex_degree(uintE id, uintE degree) {
+    assert(degree <= v_data.A[id].degree);
+    v_data.A[id].degree = degree;
+  }
 
-//   void zero_vertex_degree(uintE id) {
-//     decrease_vertex_degree(id, 0);
-//   }
+  void zero_vertex_degree(uintE id) {
+    decrease_vertex_degree(id, 0);
+  }
 
-//   template <class F>
-//   void map_edges(F f, bool parallel_inner_map = true) {
-//     parallel_for(0, n, [&](size_t i) {
-//       get_vertex(i).mapOutNgh(i, f, parallel_inner_map);
-//     }, 1);
-//   }
+  void addVertex(uintE id) {
+    while(v_data.capacity <= id) {
+      v_data.resize(2 * v_data.capacity);
+    }
+    sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1000,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    v_data.A[id].neighbors = tmp;
+    v_data.A[id].degree = 0;
+    this -> n++;
+  }
 
-//   // F : edge -> edge
-//   template <class F>
-//   void alter_edges(F f, bool parallel_inner_map = true) {
-//     abort(); /* unimplemented for CSR */
-//   }
+  void addEdge(uintE v,uintE u) {
+    // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
+    this -> m++;
+    v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+    v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+  }
 
-//   pbbs::sequence<std::tuple<uintE, uintE, W>> edges() {
-//     using g_edge = std::tuple<uintE, uintE, W>;
-//     auto degs = pbbs::sequence<size_t>(n, [&] (size_t i) {
-//       return get_vertex(i).getOutDegree();
-//     });
-//     size_t sum_degs = pbbslib::scan_add_inplace(degs.slice());
-//     assert(sum_degs == m);
-//     auto edges = pbbs::sequence<g_edge>(sum_degs);
-//     parallel_for(0, n, [&](size_t i) {
-//       size_t k = degs[i];
-//       auto map_f = [&] (const uintE& u, const uintE& v, const W& wgh) {
-//         edges[k++] = std::make_tuple(u, v, wgh);
-//       };
-//       get_vertex(i).mapOutNgh(i, map_f, false);
-//     }, 1);
-//     return edges;
-//   }
-// };
+  bool existEdge(uintE v,uintE u) {
+    return v_data.A[v].neighbors.find(u,false);
+  }
+
+  template <class F>
+  void _edges(F f, bool parallel_inner_map = true) {
+    parallel_for(0, n, [&](size_t i) {
+      get_vertex(i).mapOutNgh(i, f, parallel_inner_map);
+    }, 1);
+  }
+
+  // F : edge -> edge
+  template <class F>
+  void alter_edges(F f, bool parallel_inner_map = true) {
+    abort(); /* unimplemented for CSR */
+  }
+
+
+
+
+
+  pbbs::sequence<std::tuple<uintE, uintE, W>> edges() {
+    using g_edge = std::tuple<uintE, uintE, W>;
+    auto degs = pbbs::sequence<size_t>(n, [&] (size_t i) {
+      return get_vertex(i).getOutDegree();
+    });
+    size_t sum_degs = pbbslib::scan_add_inplace(degs.slice());
+    assert(sum_degs == m);
+    auto edges = pbbs::sequence<g_edge>(sum_degs);
+    parallel_for(0, n, [&](size_t i) {
+      size_t k = degs[i];
+      auto map_f = [&] (const uintE& u, const uintE& v, const W& wgh) {
+        edges[k++] = std::make_tuple(u, v, wgh);
+      };
+      get_vertex(i).mapOutNgh(i, map_f, false);
+    }, 1);
+    return edges;
+  }
+
+
+};
 
 
 
@@ -290,3 +349,15 @@ struct dynamic_symmetric_vertex {
 //   auto get_w = [&] (const edge& e) { return std::get<2>(e); };
 //   return sym_graph_from_edges<W>(A, n, get_u, get_v, get_w, is_sorted);
 // }
+
+
+
+
+template <template <class W> class vertex_type, class W>
+dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricGraph() {
+
+  std::function<void()> doNothing = []() {};
+  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
+
+  return dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
+}
