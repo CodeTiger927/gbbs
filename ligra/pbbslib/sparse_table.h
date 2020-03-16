@@ -261,6 +261,7 @@ class sparse_table {
     size--;
   }
 
+  // TODO: This is also wrong. set is not parallel, and you'll get contention errors.
   typename std::set<K>::iterator begin() { // Returns iterator of a set of all non-empty elements in RANDOM ORDER
     //Parallel iterates through table and adds it to set in O(1)
     //Like filter but does not care about order
