@@ -55,6 +55,9 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### ------------------------------------" << endl;
 
   assert(P.getOption("-s"));
+  // First, process the static graph -- construct the initial h-index structure
+  // Then, assume we have some array that denotes batch edge insertions/deletions
+  // In a serial for loop, process these batch updates, dynamically, including graph updates + h-index updates
   return 0;
 }
 
