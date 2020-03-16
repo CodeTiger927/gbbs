@@ -151,6 +151,7 @@ class sparse_table {
     return false;
   }
 
+  // TODO: size is also not updated here, which it should be, as for all of the other insert operations
   template <class F>
   bool insert_f(std::tuple<K, V> kv, const F& f) {
     K k = std::get<0>(kv);
