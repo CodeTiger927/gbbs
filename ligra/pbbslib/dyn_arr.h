@@ -83,6 +83,9 @@ namespace pbbslib {
       size++;
     }
 
+    //inline erase(E val, )
+    //TODO: write erase function
+
     template <class F>
     void map(F f) {
       par_for(0, size, 2000, [&] (size_t i) { f(A[i]); });

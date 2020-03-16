@@ -112,6 +112,7 @@ struct HSet {
 
     C = make_sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE>
       (n, std::make_tuple(UINT_E_MAX, empty), hash_uintE());
+    //Unable to split C into two data structures because B uses its entries and B has to be one type
   }
 
   uintE insert(uintE v) {
