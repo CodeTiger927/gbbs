@@ -1,5 +1,5 @@
 #include "h-index.h"
-
+/*
 int main() {
 
   // TODO: use integrated ligra main
@@ -41,3 +41,21 @@ int main() {
 
   return 0;
 }
+*/
+
+
+template <class Graph>
+double AppHIndex_runner(Graph& GA, commandLine P) {
+  std::cout << "### Application: H Index" << std::endl;
+  std::cout << "### Graph: " << P.getArgument(0) << std::endl;
+  std::cout << "### Threads: " << num_workers() << std::endl;
+  std::cout << "### n: " << GA.n << std::endl;
+  std::cout << "### m: " << GA.m << std::endl;
+  std::cout << "### Params: -k = " << k << " -e (epsilon) = " << epsilon << std::endl;
+  std::cout << "### ------------------------------------" << endl;
+
+  assert(P.getOption("-s"));
+  return 0;
+}
+
+generate_symmetric_main(AppHIndex_runner, false);
