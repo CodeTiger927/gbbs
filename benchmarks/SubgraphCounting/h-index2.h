@@ -13,14 +13,16 @@ struct hash_uintE {
 
 
 struct HSet {
-  symmetric_graph<symmetric_vertex, pbbs::empty>* G;
+  symmetric_graph<symmetric_vertex, pbbs::empty>* G; // pointer to graph
   sparse_table<uintE, pbbs::empty, hash_uintE> H;
-  sparse_table<uintE, pbbs::empty, hash_uintE> B;
+  sparse_table<uintE, pbbs::empty, hash_uintE> B; // Set of vertices in H with degree exactly |H| (TODO: would it be faster as an array?)
 
-  sequence<pbbslib::dyn_arr<uintE>> lowDegC;
-  sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE> C;
+  // C = inverse of deg function; set of vertices with degree i
+  sequence<pbbslib::dyn_arr<uintE>> lowDegC; // TODO: should this be a sequence of pointers to dyn_arr objects?
+  sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE> C; // TODO: would it be faster as a sparse table with pointers to arrays
   uintE threshold;
 
+  // TODO: what is this for?
   sparse_table<uintE, pbbs::empty, hash_uintE> empty;
 
   //n - number of vertices
@@ -29,6 +31,8 @@ struct HSet {
 
     empty = make_sparse_table<uintE, pbbs::empty, hash_uintE>(0, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
 
+    // TODO: graph pointer should be passed in, since it'll be created at least
+    // initially using generate_main, and maintained separately
     auto v_data = pbbs::new_array_no_init<vertex_data>(n);
     auto edges = pbbs::new_array_no_init<std::tuple<uintE, pbbs::empty>>(m);
     G = new symmetric_graph<symmetric_vertex, pbbs::empty>(v_data, n, m, get_deletion_fn(v_data, edges), (std::tuple<uintE, pbbs::empty>*) edges);
