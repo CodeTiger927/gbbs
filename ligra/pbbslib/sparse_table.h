@@ -33,7 +33,6 @@ class sparse_table {
   using T = std::tuple<K, V>;
 
   size_t m; // capacity
-  size_t size; // Stored values
   size_t mask;
   T empty;
   K empty_key;
@@ -43,11 +42,6 @@ class sparse_table {
 
   size_t capacity() {
     return m;
-  }
-
-  // TODO: why did you make this? You could just call table_name.size if you wanted the size
-  size_t sizeOf() {
-    return size;
   }
 
   static void clearA(T* A, long n, T kv) {
@@ -109,7 +103,6 @@ class sparse_table {
   sparse_table(size_t _m, T _empty, KeyHash _key_hash, T* _tab, bool clear=true)
       : m(_m),
         mask(m - 1),
-	size(0),
         table(_tab),
         empty(_empty),
         empty_key(std::get<0>(empty)),
@@ -138,8 +131,7 @@ class sparse_table {
       if (std::get<0>(table[h]) == empty_key) {
         if (pbbslib::CAS(&std::get<0>(table[h]), empty_key, k)) {
           std::get<1>(table[h]) = std::get<1>(kv);
-          // TODO: this is wrong. You're going to get errors when you run this in parallel.
-          size++;
+          
           return true;
         }
       }
@@ -151,7 +143,6 @@ class sparse_table {
     return false;
   }
 
-  // TODO: size is also not updated here, which it should be, as for all of the other insert operations
   template <class F>
   bool insert_f(std::tuple<K, V> kv, const F& f) {
     K k = std::get<0>(kv);
@@ -258,21 +249,6 @@ class sparse_table {
     
     size_t index = idx(k);
     table[index] = empty;
-    size--;
-  }
-
-  // TODO: This is also wrong. set is not parallel, and you'll get contention errors.
-  typename std::set<K>::iterator begin() { // Returns iterator of a set of all non-empty elements in RANDOM ORDER
-    //Parallel iterates through table and adds it to set in O(1)
-    //Like filter but does not care about order
-    std::set<K> nonEmpty;
-    par_for(0, m, [&] (size_t i) {
-
-      if (std::get<0>(table[i]) != empty_key) {
-        nonEmpty.insert(std::get<0>(table[i])); //Stores key only because C++ does not allow inserting tuples into sets
-      }
-    });
-    return nonEmpty.begin();
   }
 
   sequence<T> entries() {
@@ -283,7 +259,6 @@ class sparse_table {
 
   void clear() {
     par_for(0, m, 2048, [&] (size_t i) { table[i] = empty; });
-    size = 0;
   }
 };
 

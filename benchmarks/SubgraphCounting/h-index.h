@@ -3,116 +3,67 @@
 #include <set>
 #include <limits>
 #include <vector>
+#include <math.h>
 #include "ligra/ligra.h"
 #include "dynamic_symmetric_graph.h"
+#include "dyn_arr_sym_graph.h"
 #include "ligra/pbbslib/sparse_table.h"
-#include "pbbslib/hash_table.h"
-
-// Original Code for HSet
-/*
-struct HSet {
-	int f[1000];
-	std::set<int> H;
-	std::set<int> P;
-	std::set<int> B;
-	// A set to maintain H
-	std::set<int> C[1000];
-
-	int inc(int e) {
-		return change(e,f[e] + 1);
-	}
-
-	int dec(int e){
-		if(f[e] == 0) return H.size();
-		return change(e,f[e] - 1);
-	}
-
-	int insert(int e,int x) {
-		f[e] = x;
-		C[x].insert(e);
-
-		if(x > H.size()) {
-			H.insert(e);
-			if(B.size() == 0) {
-				if(C[H.size() - 1].size() == 0) {
-					B = C[H.size()];
-					C[H.size()] = std::set<int>();
-				}
-			}else{
-				int cur = *(B.begin());
-				B.erase(B.begin());
-				H.erase(cur);
-				C[H.size()].insert(cur);
-			}
-		}
-
-		return H.size();
-	}
-	
-	int erase(int e) {
-		if(B.find(e) != B.end()) {
-			B.erase(e);
-		}else{
-			C[f[e]].erase(e);
-		}
-		if(H.find(e) != H.end()) {
-			H.erase(e);
-			if(C[H.size() + 1].size() == 0) {
-				C[H.size() + 1] = B;
-				B = std::set<int>();
-			}else{
-				int cur = *(C[H.size() + 1].begin());
-				C[H.size() + 1].erase(cur);
-				B.insert(cur);
-				H.insert(cur);
-			}
-		}
-		return H.size();
-	}
-	
-	int change(int e,int x) {
-		erase(e);
-		return insert(e,x);
-	}
-};
-*/
+#include "ligra/pbbslib/dyn_arr.h"
 
 // New Code for HSet
 // For hashing sparse table
-struct hash_uintE {
-  inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
-};
+
+//Already defined
+//struct hash_uintE {
+  //inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
+//};
 
 
 struct HSet {
-  symmetric_graph<symmetric_vertex, pbbs::empty>* G;
-  sparse_table<uintE, pbbs::empty, hash_uintE> H;
-  sparse_table<uintE, pbbs::empty, hash_uintE> B;
 
-  sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE> C;
+  symmetric_graph<symmetric_vertex, pbbs::empty>* G; //Graph
 
-  sparse_table<uintE, pbbs::empty, hash_uintE> empty;
+  sparse_table<uintE, pbbs::empty, hash_uintE> H; //Set of elements such that deg(x) >= |H|
+  size_t hindex; //|H|
 
-  //n - number of vertices
+  sparse_table<uintE, pbbs::empty, hash_uintE> P;
+
+  pbbslib::dyn_arr<uintE> B; //Set of elements such that deg(x) == |H|
+
+  sequence<pbbslib::dyn_arr<uintE>*> lowDegC; //Map of elements not in H sorted by degree up to a threshold
+  sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE> highDegC; // Map of elements not in H sorted by degree greater than the threshold
+  uintE threshold;
+
+  // Makes it easier for sparse_table.find() which needs a default value
+  pbbslib::dyn_arr<uintE>* empty;
+
+
+
   //a - threshold for low and high degree vertices
-  HSet(size_t n, size_t m) {
+  HSet(uintE a, symmetric_graph<symmetric_vertex, pbbs::empty> _G) {
 
-    empty = make_sparse_table<uintE, pbbs::empty, hash_uintE>(0, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+    *empty = pbbslib::dyn_arr<uintE>(0);
 
-    auto v_data = pbbs::new_array_no_init<vertex_data>(n);
-    auto edges = pbbs::new_array_no_init<std::tuple<uintE, pbbs::empty>>(m);
-    G = new symmetric_graph<symmetric_vertex, pbbs::empty>(v_data, n, m, get_deletion_fn(v_data, edges), (std::tuple<uintE, pbbs::empty>*) edges);
+    *G = _G;
+    threshold = a;
 
 
-    H = make_sparse_table<uintE, pbbs::empty, hash_uintE>
-      (n, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+    H = make_sparse_table<uintE, pbbs::empty, hash_uintE> //|H| has to be between m/n and sqrt(2m)
+      (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+    hindex = 0;
 
-    B = make_sparse_table<uintE, pbbs::empty, hash_uintE>
-      (n, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+    P = make_sparse_table<uintE, pbbs::empty, hash_uintE>
+      (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
 
-    C = make_sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE>
-      (n, std::make_tuple(UINT_E_MAX, empty), hash_uintE());
-    //Unable to split C into two data structures because B uses its entries and B has to be one type
+    B = pbbslib::dyn_arr<uintE>(G->n);
+
+    // C = make_sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE>
+      // (n, std::make_tuple(UINT_E_MAX, empty), hash_uintE());
+
+    lowDegC = sequence<pbbslib::dyn_arr<uintE>*>(a); //possible degrees range from 0 ... a - 1
+    highDegC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
+      (G->n, std::make_tuple(UINT_E_MAX, new pbbslib::dyn_arr<uintE>(0)), hash_uintE());
+
   }
 
   uintE insert(uintE v) {
@@ -121,96 +72,173 @@ struct HSet {
     auto deg = G->get_vertex(v).getOutDegree();
     addToC(v);
 
-    if(deg > H.sizeOf()) {
+    if(deg > hindex) {
 
       H.insert(std::make_tuple(v, pbbs::empty()));
+      hindex++;
 
-      if(B.sizeOf() != 0) {
-        auto y = *(B.begin());
+      if(B.size != 0) {
+        auto y = B.A[0];
         B.erase(y);
         H.erase(y);
+        hindex--;
+
         addToC(y);
       }
 
       else {
         // If C has entry for |H|, set that to B. Otherwise B is empty
-        if (C.contains(H.sizeOf())) {
-
-          B = C.find(H.sizeOf(), empty);
-          C.erase(H.sizeOf());
+        if (containedInC(hindex)) {
+          
+          if (hindex > threshold) {
+            B = *highDegC.find(hindex, empty);
+            highDegC.erase(hindex);
+          }
+          else {
+            B = *lowDegC[hindex];
+            lowDegC[hindex]->clear();
+          }
         }
+
         else {
           B.clear();
         }
-      }
 
+      }
     }
 
-    return H.sizeOf();
+    return hindex;
+
   }
 
    
   uintE erase(uintE v) {
 
     // Remove from Graph!!
+
     auto deg = G->get_vertex(v).getOutDegree();
-    if (B.contains(v)) {
+    if (B.indexOf(v) != -1) {
       B.erase(v);
     }
-    else {
-      C.find(deg, empty).erase(v);
-    }
 
+    else {
+      removeFromC(v);
+    }
     
     if (H.contains(v)) {
-      auto h = H.sizeOf(); //h is |H| before removing v
-      H.erase(v);
 
-      if (C.find(h, empty).sizeOf() != 0) { //Has entry for C[h]
-        auto y = *C.find(h, empty).begin();
-        removeFromC(y);
-        B.insert(std::make_tuple(y, pbbs::empty()));
-        H.insert(std::make_tuple(y, pbbs::empty()));
+      auto h = hindex; //h is |H| before removing v
+      H.erase(v);
+      hindex--;
+
+      if (P.contains(v)) {
+        P.erase(v);
+      }
+
+      if (h > threshold) {
+
+       if (highDegC.find(h, empty)->size != 0) { //Has entry for C[h]
+          auto y = highDegC.find(h, empty)->A[0];
+          removeFromC(y);
+          B.add(y);
+          H.insert(std::make_tuple(y, pbbs::empty()));
+        }
+        else {
+          //highDegC.insert(std::make_tuple(h, *B));
+          //B.clear(); //Might change the value of the entry in C 
+
+          highDegC.insert(std::make_tuple(h, new pbbslib::dyn_arr(B))); //Creates pointer to copy of B
+          B.clear();
+        }
       }
       else {
-        C.insert(std::make_tuple(h, B));
-        B.clear();
-      }
+        if (lowDegC[h] != nullptr || lowDegC[h]->size != 0) { //Has entry for C[h]
+          auto y = lowDegC[h]->A[0];
+          removeFromC(y);
+          B.add(y);
+          H.insert(std::make_tuple(y, pbbs::empty()));
+        }
+        else {
+          lowDegC[h] = new pbbslib::dyn_arr(B); //Creates pointer to copy of B
+          B.clear();
+        }
 
+      }
     }
 
-    return H.sizeOf();
+    return hindex;
   }
 	
-  uintE change(uintE v, uintE x) {
+  uintE change(uintE v) {
+
     erase(v);
-    return insert(v);
+    insert(v);
+
+    //Why only add elements to P in an update?
+    //What is the point of maintaining the dictionary parallel to C? Can't we just add during the update?
+    if (G->get_vertex(v).getOutDegree() >= 2 * hindex) {
+      P.insert(std::make_tuple(v, pbbs::empty()));
+    }
+
+    return hindex;
   }
 
   void addToC(uintE v) {
 
     uintE deg = G->get_vertex(v).getOutDegree();
+    auto vertices = highDegC.find(deg, empty); //Vertices of degree "deg"
 
-    auto vertices = C.find(deg, empty); //Vertices of degree "deg"
+    // Add to highDegC
+    if (deg > threshold) {
 	    
-    if (vertices.sizeOf() == 0) { //If entry for deg is empty, create new sparse_table entry
-        C.insert(std::make_tuple(deg, make_sparse_table<uintE, pbbs::empty, hash_uintE>(G->n, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE())));
+      if (vertices->capacity == 0) { //If entry for deg is empty, create new sparse_table entry
+          highDegC.insert(std::make_tuple(deg, new pbbslib::dyn_arr<uintE>(G->n)));
+      }
+      highDegC.find(deg, empty)->add(v);
     }
-    C.find(deg, empty).insert(std::make_tuple(deg, pbbs::empty()));
+    // Add to lowDegC
+    else {
+      if (lowDegC[deg] == nullptr) {
+        lowDegC[deg] = new pbbslib::dyn_arr<uintE>(G->n);
+      }
+      lowDegC[deg]->add(v);
+    }
 
   }
 
   void removeFromC(uintE v) { // Assumes v is in C
     
     uintE deg = G->get_vertex(v).getOutDegree();
+    
+    //Remove from highDegC
+    if (deg > threshold) {
+      auto vertices = highDegC.find(deg, empty);
+      if (vertices->size == 1) { // Deletes entire entry if it is empty (or will be)
+        highDegC.erase(deg);
+      }
+      else {
+        vertices->erase(v);
+      }
+    }
+    //Remove from lowDegC
+    else {
 
-    auto vertices = C.find(deg, empty);
-    if (vertices.sizeOf() == 1) { // Deletes entire entry if it is empty (or will be)
-      C.erase(deg);
+      lowDegC[deg]->erase(v);
+    }
+  }
+
+  bool containedInC(uintE deg) {
+    if (deg > threshold) {
+
+      return highDegC.contains(deg);
     }
     else {
-      vertices.erase(v);
+      if (lowDegC[deg] == nullptr) {
+        return false;
+      }
+      return lowDegC[deg]->size != 0;
     }
+    
   }
 
 };
@@ -226,15 +254,10 @@ struct graph {
     std::vector<int> edges[1000];
     std::vector<int> hedges[100][100];
 
-	public:
-		HSet h;
-		std::vector<int> edges[1000];
-		std::vector<int> hedges[100][100];
-
     int triangles = 0;
 
-    graph() {
-      h = new HSet(1000, 100);
+    graph(symmetric_graph<symmetric_vertex, pbbs::empty> _G) {
+      h = new HSet(100, _G);
     }
 
     void insertV(uintE v) {
@@ -262,23 +285,4 @@ struct graph {
 
       return triangles;
     }
-};
-		int connect(int v,int u) {
-			h.inc(v);
-			h.inc(u);
-
-			triangles += hedges[u][v].size();
-			for(int i = 0;i < edges[u].size();i++) {
-				hedges[v][edges[u][i]].push_back(u);
-				hedges[edges[u][i]][v].push_back(u);
-			}
-			for(int i = 0;i < edges[v].size();i++) {
-				hedges[u][edges[v][i]].push_back(v);
-				hedges[edges[v][i]][u].push_back(v);
-			}
-			edges[v].push_back(u);
-			edges[u].push_back(v);
-
-			return this -> triangles;
-		}
 };

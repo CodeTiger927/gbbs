@@ -43,7 +43,6 @@ int main() {
 }
 */
 
-
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -51,7 +50,7 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Threads: " << num_workers() << std::endl;
   std::cout << "### n: " << GA.n << std::endl;
   std::cout << "### m: " << GA.m << std::endl;
-  std::cout << "### Params: -k = " << k << " -e (epsilon) = " << epsilon << std::endl;
+  //std::cout << "### Params: -k = " << k << " -e (epsilon) = " << epsilon << std::endl;
   std::cout << "### ------------------------------------" << endl;
 
   assert(P.getOption("-s"));

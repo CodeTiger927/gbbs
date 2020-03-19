@@ -45,6 +45,12 @@ namespace pbbslib {
     dyn_arr(E* _A, long _size, long _capacity, bool _alloc)
         : A(_A), size(_size), capacity(_capacity), alloc(_alloc) {}
 
+    //Copy constructor
+    dyn_arr(const dyn_arr& array) {
+      A = pbbslib::new_array_no_init<E>(array.capacity);
+      par_for(0, size, 2000, [&] (size_t i) { A[i] = array.A[i]; });
+    }
+
     void del() {
       if (alloc) {
         pbbslib::free_array(A);
@@ -83,8 +89,29 @@ namespace pbbslib {
       size++;
     }
 
-    //inline erase(E val, )
-    //TODO: write erase function
+    //Erase does not maintain order (does it have to?)
+    inline void erase(E val) {
+      size_t index = indexOf(val);
+
+      if (index < size - 1) {
+        A[index] = A[size - 1]; //Replaces value with last element
+      }
+      size--; //Decreases size
+    }
+
+    //Similar to sparse_table implementation
+    inline size_t indexOf(E val) {
+
+      for (int i = 0; i < size; i++) {
+
+        if (A[i] == val) {
+          return i;
+        }
+
+      }
+
+      return -1;
+    }
 
     template <class F>
     void map(F f) {
