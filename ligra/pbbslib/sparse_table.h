@@ -248,9 +248,7 @@ class sparse_table {
   void erase(K k) { // Assumes that k is in sparse_table
     
     size_t index = idx(k);
-    cout << "idx" << index << endl;
     table[index] = empty;
-    cout << "DONE" << index << endl;
   }
 
   sequence<T> entries() {
