@@ -18,6 +18,7 @@
   //inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
 //};
 
+//TODO: same notes as on h-index2
 
 struct HSet {
 
