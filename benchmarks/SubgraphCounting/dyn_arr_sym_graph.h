@@ -1,6 +1,7 @@
 #include "ligra/pbbslib/dyn_arr.h"
 
-
+// TODO: I think vertex_data is used in some other algorithms for specific data structures -- it'd be good to double
+// check this and perhaps add the wrapper anyways, if it would be used
 //No need for vertex_data because it would store dyn_arr of neighbors anyways
 struct dyn_arr_sym_vertex {
   uintE id;
@@ -16,6 +17,12 @@ struct dyn_arr_sym_vertex {
     neighbors(pbbslib::dyn_arr<uintE>(n))
   {}
 
+  // TODO: We're going to need batch-parallel add/removals, since you can't
+  // add to a dynamic array in parallel as is. The add/remove should have
+  // an array or function as input, and a size, and then add/remove
+  // all specified vertices in parallel. Note that you cannot just wrap
+  // a parallel for around the neighbors array, since this is not thread-safe.
+  // You'll need a batch parallel function in dyn_arr to handle this.
   void add_neighbor(uintE v) {
     deg++;
     neighbors.add(v);
@@ -26,6 +33,12 @@ struct dyn_arr_sym_vertex {
     neighbors.erase(v);
   }
 
+  // TODO: Yes, we need all of this. It's used in other functions separate from
+  // what you're coding. This is the idea of an API -- you guarantee that you
+  // have certain functions available for everyone to use. We want this
+  // graph structure to be integrated into the codebase regardless of the
+  // specific subgraph counting code that you're working on, and other people
+  // expect these functions in the API and will use it.
   //Do we need all this
   /*
   void clear() { pbbslib::free_array(neighbors); }
@@ -294,12 +307,18 @@ struct dyn_arr_sym_graph {
     deletion_fn();
   }
   
+  // TODO: Why would you initialize to n neighbors? n is the maximum
+  // possible of neighbors, and this will use too much space. It should
+  // initialize to a much more reasonable size.
   //Vertex starts out without neighbors
   //n - initial capacity of neighbors
   void add_vertex(uintE i, size_t n) {
     vertices.A[i] = new dyn_arr_sym_vertex(i, n);
   }
 
+  // TODO: We need to decide if we want to have lazy deletion or not. There
+  // are pros and cons, and perhaps we would want a version without
+  // lazy deletion. We can discuss this later.
   //Does not actually remove space because index needed to keep id
   //Assumes that the vertex has no neighbors
   void remove_vertex(uintE i) {
@@ -307,6 +326,10 @@ struct dyn_arr_sym_graph {
     vertices.A[i] = nullptr;
   }
 
+  // TODO: Never assume. Throw appropriate errors if you have not received
+  // correct input. Similarly for removal. Also, these must be
+  // batch parallel, and should handle multiple edge additions and
+  // removals in parallel.
   //Assumes that the vertices have not been removed
   void add_edge(uintE u, uintE v) {
     get_vertex(u)->add_neighbor(v);
