@@ -186,16 +186,29 @@ dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, 
     decrease_vertex_degree(id, 0);
   }
 
+  // TODO: Put in a wrapper function that does batch-parallel vertex and 
+  // edge additions/deletions. It should take as input an array or function, and a size,
+  // and it will add and delete all vertices/edges in that input in parallel.
   void addVertex(uintE id) {
+    // TODO: Why is this in a while loop? You should compute using math
+    // log functions what capacity you need, and resize once; it is expensive
+    // to resize like this.
     while(v_data.capacity <= id) {
       v_data.resize(2 * v_data.capacity);
     }
+    // TODO: Do not use a constant like 1000 to initialize. You should initialize
+    // to a reasonable value that is either a constant variable or an input, 
+    // and you'll need a way to resize.
     sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1000,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     v_data.A[id].neighbors = tmp;
     v_data.A[id].degree = 0;
     this -> n++;
   }
 
+  // TODO: Same issues as above for batch-parallel. You also need to put in a
+  // check that you are not adding more neighbors than is capacity in the sparse
+  // table, and you'll have to do sparse table resizing if you
+  // are adding more neighbors than capacity.
   void addEdge(uintE v,uintE u) {
     // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
     this -> m++;
