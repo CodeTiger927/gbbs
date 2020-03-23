@@ -5,12 +5,17 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <cmath>
 
 #include "pbbslib/sequence_ops.h"
 
 #include "ligra/pbbslib/sparse_table.h"
 
 #include "ligra/pbbslib/dyn_arr.h"
+
+
+
+#define INIT_VALUE_FOR_SIZE 100
 
 
 
@@ -63,6 +68,7 @@ struct hash_uintE {
 struct dynamic_vertex_data {
   uintE degree;  // vertex degree
   sparse_table<uintE,bool,hash_uintE> neighbors;
+  pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries;
 };
 
 
@@ -76,18 +82,18 @@ struct dynamic_symmetric_vertex {
   using edges_type = sparse_table<uintE,bool,hash_uintE>;
 
   uintE degree;
-  edges_type neighbors = make_sparse_table<uintE,bool,hash_uintE>(1000,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-  pbbslib::dyn_arr<edge_type> entries = pbbslib::dyn_arr<edge_type>(1000);
-
+  edges_type neighbors = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+  pbbslib::dyn_arr<edge_type> entries;
 
   dynamic_symmetric_vertex(dynamic_vertex_data& vdata) {
     neighbors = vdata.neighbors;
     degree = vdata.degree;
+    entries = vdata.entries;
 
-    sequence<std::tuple<uintE,bool>> s = neighbors.entries();
-    par_for(0,s.size(),1,[&](size_t i) {
-      if(std::get<1>(s[i])) this -> entries.push_back(std::make_tuple(std::get<0>(s[i]),true));
-    });
+    // sequence<std::tuple<uintE,bool>> s = neighbors.entries();
+    // par_for(0,s.size(),1,[&](size_t i) {
+    //   if(std::get<1>(s[i])) this -> entries.push_back(std::make_tuple(std::get<0>(s[i]),true));
+    // });
   }
 
 
@@ -146,13 +152,15 @@ struct dynamic_symmetric_graph {
   /* called to delete the graph */
   std::function<void()> deletion_fn;
 
-dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, size_t m,
+  dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, size_t m,
     std::function<void()> _deletion_fn)
       : v_data(v_data),
         n(n),
         m(m),
         deletion_fn(_deletion_fn) {
   }
+
+
 
   void del() {
     deletion_fn();
@@ -186,39 +194,102 @@ dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, 
     decrease_vertex_degree(id, 0);
   }
 
+  void batchAddVertexes(sequence<uintE> & vertexes) {
+    size_t size = vertexes.size();
+
+    uintE m;
+    // From Alex: Hmm so basically I dont think this is
+    // supposed to be working since what if multiple parallel
+    // processors try to change m at the same time?
+    // But it seems to work fine when I test it? Idk
+    m = 0;
+    par_for(0,size,1,[&](size_t i) {
+      if(vertexes[i] > m) m = vertexes[i];
+    });
+
+    if(m >= v_data.size) {
+      v_data.resize(1 << (int)floor(log(m)) + 1);
+    }    
+    par_for(0,size,1,[&](size_t i) {
+      uintE id = vertexes[i];
+      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+      pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
+    
+      v_data.A[id].neighbors = tmp;
+      v_data.A[id].degree = 0;
+      v_data.A[id].entries = entries;
+    });
+
+    this -> n += size;
+  }
+
   // TODO: Put in a wrapper function that does batch-parallel vertex and 
   // edge additions/deletions. It should take as input an array or function, and a size,
   // and it will add and delete all vertices/edges in that input in parallel.
   void addVertex(uintE id) {
-    // TODO: Why is this in a while loop? You should compute using math
-    // log functions what capacity you need, and resize once; it is expensive
-    // to resize like this.
-    while(v_data.capacity <= id) {
-      v_data.resize(2 * v_data.capacity);
-    }
+
+    if(id >= v_data.size) v_data.resize(1 << (int)floor(log(id)) + 1);
+
+
     // TODO: Do not use a constant like 1000 to initialize. You should initialize
     // to a reasonable value that is either a constant variable or an input, 
     // and you'll need a way to resize.
-    sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1000,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
+    
     v_data.A[id].neighbors = tmp;
     v_data.A[id].degree = 0;
-    this -> n++;
-  }
+    v_data.A[id].entries = entries;
 
-  // TODO: Same issues as above for batch-parallel. You also need to put in a
-  // check that you are not adding more neighbors than is capacity in the sparse
-  // table, and you'll have to do sparse table resizing if you
-  // are adding more neighbors than capacity.
-  void addEdge(uintE v,uintE u) {
-    // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
-    this -> m++;
-    v_data.A[v].neighbors.insert(std::make_tuple(u,true));
-    v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+    this -> n++;
   }
 
   bool existEdge(uintE v,uintE u) {
     return v_data.A[v].neighbors.find(u,false);
   }
+
+  void _checkSize(uintE v,uintE many) {
+    if(v_data.A[v].entries.size > v_data.A[v].entries.capacity - 10 - many) {
+      v_data.A[v].entries.resize(1 << (int)floor(v_data.A[v].entries.size + 10 + many) + 1);
+    }
+    if(v_data.A[v].degree > v_data.A[v].neighbors.m - 10 - many) {
+      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)floor(v_data.A[v].neighbors.m + many + 10) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+      par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
+        tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),true));
+      });
+      v_data.A[v].neighbors = tmp;
+    }
+  }
+
+  void batchAddEdges(uintE u,sequence<uintE> edges) {
+
+    this -> m += edges.size();
+    _checkSize(u,edges.size());
+    v_data.A[u].degree += edges.size();
+    par_for(0,edges.size(),1,[&](size_t i) {
+      uintE v = edges[i];
+      _checkSize(v,1);
+
+      v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+      v_data.A[v].entries.push_back(std::make_tuple(u,0));
+      v_data.A[u].entries.push_back(std::make_tuple(v,0));
+      v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+
+      v_data.A[v].degree++;
+    });
+  }
+
+  void addEdge(uintE v,uintE u) {
+    // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
+    this -> m++;
+    _checkSize(v,1);
+    _checkSize(u,1);
+    v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+    v_data.A[v].entries.push_back(std::make_tuple(u,0));
+    v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+    v_data.A[u].entries.push_back(std::make_tuple(v,0));
+  }
+
 
   template <class F>
   void _edges(F f, bool parallel_inner_map = true) {
@@ -365,12 +436,11 @@ dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, 
 
 
 
-
 template <template <class W> class vertex_type, class W>
 dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricGraph() {
 
   std::function<void()> doNothing = []() {};
-  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
+  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(0);
 
   return dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
 }
