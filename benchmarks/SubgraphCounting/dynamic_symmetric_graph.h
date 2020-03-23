@@ -161,6 +161,13 @@ struct dynamic_symmetric_graph {
   }
 
 
+  sequence<uintE> unionEdge(uintE u,uintE v) {
+    if(v_data.A[u].entries.size > v_data.A[v].entries.size) return unionEdge(v,u);
+    auto fil = [&](uintE& t) {return existEdge(v,t);};
+    sequence<uintE> s = sequence<uintE>(v_data.A[u].entries.size,[&](uintE i){return std::get<0>(v_data.A[u].entries.A[i]);});
+    return pbbslib::filter(s,fil);
+  }
+
 
   void del() {
     deletion_fn();
