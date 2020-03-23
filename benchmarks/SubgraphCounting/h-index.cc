@@ -1,4 +1,5 @@
 #include "h-index.h"
+
 /*
 int main() {
 
@@ -57,7 +58,27 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   // First, process the static graph -- construct the initial h-index structure
   // Then, assume we have some array that denotes batch edge insertions/deletions
   // In a serial for loop, process these batch updates, dynamically, including graph updates + h-index updates
+
+  //Temporary Test for H-index
+  //EXAMPLE: ./h-index -s "graph_test.txt"
+  //Why does it run 3 times?
+  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
+  HSet h = HSet(100, G);
+  
+  cout << h.insert(0) << endl;
+  cout << h.insert(1) << endl;
+  cout << h.insert(2) << endl;
+  cout << h.insert(3) << endl;
+  cout << h.insert(4) << endl;
+  cout << h.insert(5) << endl;
+  cout << h.erase(0) << endl;
+  cout << h.erase(1) << endl;
+  cout << h.erase(2) << endl << endl << endl;
+
+  cout << "Execution Complete" << endl;
+
   return 0;
 }
 
 generate_symmetric_main(AppHIndex_runner, false);
+

@@ -113,6 +113,13 @@ namespace pbbslib {
       return -1;
     }
 
+    inline void add(E val) {
+      if (size >= capacity) {
+        resize(1); //Should double size
+      }
+      push_back(val);
+    }
+
     template <class F>
     void map(F f) {
       par_for(0, size, 2000, [&] (size_t i) { f(A[i]); });
