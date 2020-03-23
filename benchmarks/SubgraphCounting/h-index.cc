@@ -1,4 +1,23 @@
 #include "h-index.h"
+int main() {
+
+  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
+  HSet h = HSet(100, G);
+  
+  cout << h.insert(0) << endl;
+  cout << h.insert(1) << endl;
+  cout << h.insert(2) << endl;
+  cout << h.insert(3) << endl;
+  cout << h.insert(4) << endl;
+  cout << h.insert(5) << endl;
+  cout << h.erase(0) << endl;
+  cout << h.erase(1) << endl;
+  cout << h.erase(2) << endl << endl << endl;
+
+  cout << "Execution Complete" << endl;
+  
+}
+
 /*
 int main() {
 
@@ -42,7 +61,7 @@ int main() {
   return 0;
 }
 */
-
+/*
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -61,3 +80,4 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 }
 
 generate_symmetric_main(AppHIndex_runner, false);
+*/

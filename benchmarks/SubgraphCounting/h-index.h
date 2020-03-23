@@ -43,12 +43,13 @@ struct HSet {
   //a - threshold for low and high degree vertices
   HSet(uintE a, symmetric_graph<symmetric_vertex, pbbs::empty> _G) {
 
-    *empty = pbbslib::dyn_arr<uintE>(0);
+    auto e = pbbslib::dyn_arr<uintE>(0);
+    empty = &e; 
 
-    *G = _G;
+    G = &_G;
     threshold = a;
 
-
+    
     H = make_sparse_table<uintE, pbbs::empty, hash_uintE> //|H| has to be between m/n and sqrt(2m)
       (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
     hindex = 0;
@@ -64,6 +65,8 @@ struct HSet {
     lowDegC = sequence<pbbslib::dyn_arr<uintE>*>(a); //possible degrees range from 0 ... a - 1
     highDegC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
       (G->n, std::make_tuple(UINT_E_MAX, new pbbslib::dyn_arr<uintE>(0)), hash_uintE());
+
+    par_for(0, lowDegC.size(), [&] (size_t i) { lowDegC[i] = nullptr; });
 
   }
 
