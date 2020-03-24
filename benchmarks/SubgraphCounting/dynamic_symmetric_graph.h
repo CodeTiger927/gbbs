@@ -220,7 +220,7 @@ struct dynamic_symmetric_graph {
     par_for(0,size,1,[&](size_t i) {
       uintE id = vertexes[i];
       sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-      pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
+      pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(1);
     
       v_data.A[id].neighbors = tmp;
       v_data.A[id].degree = 0;
@@ -256,8 +256,8 @@ struct dynamic_symmetric_graph {
   }
 
   void _checkSize(uintE v,uintE many) {
-    if(v_data.A[v].entries.size > v_data.A[v].entries.capacity - 10 - many) {
-      v_data.A[v].entries.resize(1 << (int)floor(v_data.A[v].entries.size + 10 + many) + 1);
+    if((int)v_data.A[v].entries.size > (0 + (int)v_data.A[v].entries.capacity - 10 - (int)many)) {
+      v_data.A[v].entries.resize(1 << (int)floor(log(v_data.A[v].entries.size + 10 + many)) + 1);
     }
     if(v_data.A[v].degree > v_data.A[v].neighbors.m - 10 - many) {
       sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)floor(v_data.A[v].neighbors.m + many + 10) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
@@ -271,21 +271,29 @@ struct dynamic_symmetric_graph {
   void batchAddEdges(uintE u,sequence<uintE> edges) {
 
     this -> m += edges.size();
+
     _checkSize(u,edges.size());
+
+
+    size_t ori = v_data.A[u].entries.size;
+    v_data.A[u].entries.size += edges.size();
+
     v_data.A[u].degree += edges.size();
     par_for(0,edges.size(),1,[&](size_t i) {
       uintE v = edges[i];
       _checkSize(v,1);
-
+      //cout << "No segmentation fault yet " << i << endl;
       v_data.A[v].neighbors.insert(std::make_tuple(u,true));
       v_data.A[v].entries.push_back(std::make_tuple(u,0));
-      v_data.A[u].entries.push_back(std::make_tuple(v,0));
+      v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
       v_data.A[u].neighbors.insert(std::make_tuple(v,true));
 
       v_data.A[v].degree++;
     });
   }
 
+
+  // Btw this cannot be used in parallel.
   void addEdge(uintE v,uintE u) {
     // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
     this -> m++;
@@ -447,7 +455,7 @@ template <template <class W> class vertex_type, class W>
 dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricGraph() {
 
   std::function<void()> doNothing = []() {};
-  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(0);
+  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
 
   return dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
 }
