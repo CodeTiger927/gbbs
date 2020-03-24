@@ -48,7 +48,7 @@ namespace pbbslib {
     //Copy constructor
     dyn_arr(const dyn_arr& array) {
       A = pbbslib::new_array_no_init<E>(array.capacity);
-      par_for(0, size, 2000, [&] (size_t i) { A[i] = array.A[i]; });
+      par_for(0, array.size, [&] (size_t i) { A[i] = array.A[i]; });
     }
 
     void del() {
