@@ -9,6 +9,8 @@
 
 #include "pbbslib/sequence_ops.h"
 
+#include "pbbslib/monoid.h"
+
 #include "ligra/pbbslib/sparse_table.h"
 
 #include "ligra/pbbslib/dyn_arr.h"
@@ -20,16 +22,7 @@
 // this value should not be a constant at all -- it should be chosen dynamically
 // based off of the graph G and the initial max degree or degree distribution
 // of the graph.
-#define INIT_VALUE_FOR_SIZE 100
-
-
-
-// General Comment and TODO (From Alex):
-// After coding the Symmetric Graph Class. I cannot help but notice that the vertex class is
-// pretty useless since all of its functionality can be easily replaced by directly using
-// vertex data, and due to the nature of sparse_table, I have to create a entries dyn_arr
-// every time we initialize a vertex, which is like O(N) at first, so maybe I should somehow
-// remove vertex or integrate the entries dyn_arr into vertex_data.
+uintE INIT_VALUE_FOR_SIZE = 2;
 
 
 
@@ -43,24 +36,9 @@ inline void mapNghs(vertex<W>* v, uintE vtx_id, std::tuple<uintE, W>* nghs,
 }
 
 
-
-
-
 std::function<void()> get_deletion_fn(void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*, void*);
-
-/* Compressed Sparse Row (CSR) based representation for symmetric graphs.
- * Takes two template parameters:
- * 1) vertex_type: vertex template, parametrized by the weight type associated with each edge
- * 2) W: the weight template
- * The graph is represented as an array of edges of type vertex_type::edge_type,
- * which is just a tuple<uintE, W>.*/
-
-
-// currently this is using CSR so I need to change this into sparse table
-
-
 
 
 // We need to remove this in one of the files to avoid redefinition (h-index2.h)
@@ -94,11 +72,6 @@ struct dynamic_symmetric_vertex {
     neighbors = vdata.neighbors;
     degree = vdata.degree;
     entries = vdata.entries;
-
-    // sequence<std::tuple<uintE,bool>> s = neighbors.entries();
-    // par_for(0,s.size(),1,[&](size_t i) {
-    //   if(std::get<1>(s[i])) this -> entries.push_back(std::make_tuple(std::get<0>(s[i]),true));
-    // });
   }
 
 
@@ -206,32 +179,18 @@ struct dynamic_symmetric_graph {
     decrease_vertex_degree(id, 0);
   }
 
-  // TODO: "vertices", not "vertexes"
-  void batchAddVertexes(sequence<uintE> & vertexes) {
-    size_t size = vertexes.size();
+  void batchAddVertices(sequence<uintE> & vertices) {
+    size_t size = vertices.size();
 
-    // TODO: One issue here is that m is a local variable. You've shadowed
-    // the struct's variable with a local uintE m, hence why you are not
-    // receiving parallel issues -- but this also means that the global m
-    // is not being properly updated.
-    uintE m;
-    // From Alex: Hmm so basically I dont think this is
-    // supposed to be working since what if multiple parallel
-    // processors try to change m at the same time?
-    // But it seems to work fine when I test it? Idk
-    // TODO: The other issue here is that it is not correct to update m like
-    // this. You should be doing a max reduce. Basically, use reduce from
-    // sequence_ops.h in pbbslib, and use the maxm monoid from monoid.h.
-    m = 0;
-    par_for(0,size,1,[&](size_t i) {
-      if(vertexes[i] > m) m = vertexes[i];
-    });
+    pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
+    uintE ma = pbbs::reduce(vertices,monoidm);
 
-    if(m >= v_data.size) {
-      v_data.resize(1 << (int)floor(log(m)) + 1);
+
+    if(ma >= v_data.size) {
+      v_data.resize(1 << (int)ceil(log2(ma)) + 1);
     }
     par_for(0,size,1,[&](size_t i) {
-      uintE id = vertexes[i];
+      uintE id = vertices[i];
       sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
       pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(1);
     
@@ -241,6 +200,8 @@ struct dynamic_symmetric_graph {
     });
 
     this -> n += size;
+
+
   }
 
   // TODO: Put in a wrapper function that does batch-parallel vertex and 
@@ -248,12 +209,9 @@ struct dynamic_symmetric_graph {
   // and it will add and delete all vertices/edges in that input in parallel.
   void addVertex(uintE id) {
 
-    if(id >= v_data.size) v_data.resize(1 << (int)floor(log(id)) + 1);
+    if(id >= v_data.size) v_data.resize(1 << (int)ceil(log2(id)) + 1);
 
 
-    // TODO: Do not use a constant like 1000 to initialize. You should initialize
-    // to a reasonable value that is either a constant variable or an input, 
-    // and you'll need a way to resize.
     sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
     
@@ -271,10 +229,10 @@ struct dynamic_symmetric_graph {
   // TODO: What is this meant to do? Why the -10?
   void _checkSize(uintE v,uintE many) {
     if((int)v_data.A[v].entries.size > (0 + (int)v_data.A[v].entries.capacity - 10 - (int)many)) {
-      v_data.A[v].entries.resize(1 << (int)floor(log(v_data.A[v].entries.size + 10 + many)) + 1);
+      v_data.A[v].entries.resize(1 << (int)ceil(log2(v_data.A[v].entries.size + 10 + many)));
     }
-    if(v_data.A[v].degree > v_data.A[v].neighbors.m - 10 - many) {
-      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)floor(v_data.A[v].neighbors.m + many + 10) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    if((int)v_data.A[v].degree > (int)v_data.A[v].neighbors.m - (int)10 - (int)many) {
+      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m + many + 10)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
       par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
         tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),true));
       });
@@ -285,7 +243,6 @@ struct dynamic_symmetric_graph {
   void batchAddEdges(uintE u,sequence<uintE> edges) {
 
     this -> m += edges.size();
-
     _checkSize(u,edges.size());
 
 
@@ -296,6 +253,7 @@ struct dynamic_symmetric_graph {
     par_for(0,edges.size(),1,[&](size_t i) {
       uintE v = edges[i];
       _checkSize(v,1);
+
       //cout << "No segmentation fault yet " << i << endl;
       v_data.A[v].neighbors.insert(std::make_tuple(u,true));
       v_data.A[v].entries.push_back(std::make_tuple(u,0));
@@ -303,13 +261,14 @@ struct dynamic_symmetric_graph {
       v_data.A[u].neighbors.insert(std::make_tuple(v,true));
 
       v_data.A[v].degree++;
+
     });
   }
 
 
   // Btw this cannot be used in parallel.
   void addEdge(uintE v,uintE u) {
-    // TODO: Add something to prevent non-existant vertexes to connect each other. Or if an already existing edge
+    // TODO: Add something to prevent non-existant vertices to connect each other. Or if an already existing edge
     this -> m++;
     _checkSize(v,1);
     _checkSize(u,1);
