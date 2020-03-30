@@ -75,6 +75,7 @@ struct HSet {
 
   }
 
+  // TODO: Is this parallel? Can we make this batch-parallel or is it thread-safe?
   uintE insert(uintE v) {
 
     //ADD TO GRAPH!!
