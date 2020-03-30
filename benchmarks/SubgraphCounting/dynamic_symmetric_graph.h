@@ -268,6 +268,7 @@ struct dynamic_symmetric_graph {
     return v_data.A[v].neighbors.find(u,false);
   }
 
+  // TODO: What is this meant to do? Why the -10?
   void _checkSize(uintE v,uintE many) {
     if((int)v_data.A[v].entries.size > (0 + (int)v_data.A[v].entries.capacity - 10 - (int)many)) {
       v_data.A[v].entries.resize(1 << (int)floor(log(v_data.A[v].entries.size + 10 + many)) + 1);
