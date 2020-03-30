@@ -62,6 +62,11 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   //Temporary Test for H-index
   //EXAMPLE: ./h-index -s "graph_test.txt"
   //Why does it run 3 times?
+  // TODO: You have to pass -rounds 1 to make it run only 1 time (or however many times you would like).
+  // The reason why it runs 3 times is because sometimes, the cache is cold on the first run;
+  // the second run warms up the cache, and may give faster times. Usually we report the 
+  // minimum of all 3 runs for timing tests.
+  // TODO: Why is G being read in this way? GA is the passed in graph.
   symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
   HSet h = HSet(100, G);
   
