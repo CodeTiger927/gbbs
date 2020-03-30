@@ -15,6 +15,11 @@
 
 
 
+// TODO: It's not really good practice to use a preprocessor directive to set
+// a constant. If anything, you should use a global constant. In reality,
+// this value should not be a constant at all -- it should be chosen dynamically
+// based off of the graph G and the initial max degree or degree distribution
+// of the graph.
 #define INIT_VALUE_FOR_SIZE 100
 
 
@@ -224,7 +229,7 @@ struct dynamic_symmetric_graph {
 
     if(m >= v_data.size) {
       v_data.resize(1 << (int)floor(log(m)) + 1);
-    }    
+    }
     par_for(0,size,1,[&](size_t i) {
       uintE id = vertexes[i];
       sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
