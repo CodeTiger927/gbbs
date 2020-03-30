@@ -68,6 +68,7 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   // minimum of all 3 runs for timing tests.
   // TODO: Why is G being read in this way? GA is the passed in graph.
   symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
+  // TODO: Threshold should be determined based on G, not written as a constant
   HSet h = HSet(100, G);
   
   cout << h.insert(0) << endl;
