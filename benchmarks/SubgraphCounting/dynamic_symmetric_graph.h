@@ -201,14 +201,22 @@ struct dynamic_symmetric_graph {
     decrease_vertex_degree(id, 0);
   }
 
+  // TODO: "vertices", not "vertexes"
   void batchAddVertexes(sequence<uintE> & vertexes) {
     size_t size = vertexes.size();
 
+    // TODO: One issue here is that m is a local variable. You've shadowed
+    // the struct's variable with a local uintE m, hence why you are not
+    // receiving parallel issues -- but this also means that the global m
+    // is not being properly updated.
     uintE m;
     // From Alex: Hmm so basically I dont think this is
     // supposed to be working since what if multiple parallel
     // processors try to change m at the same time?
     // But it seems to work fine when I test it? Idk
+    // TODO: The other issue here is that it is not correct to update m like
+    // this. You should be doing a max reduce. Basically, use reduce from
+    // sequence_ops.h in pbbslib, and use the maxm monoid from monoid.h.
     m = 0;
     par_for(0,size,1,[&](size_t i) {
       if(vertexes[i] > m) m = vertexes[i];
