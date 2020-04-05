@@ -1,10 +1,10 @@
-#include <string>
-
+#include <cstring>
 #include <stdlib.h>
 #include <fstream>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <fstream>
 #include <cmath>
 
 #include "pbbslib/sequence_ops.h"
@@ -22,7 +22,7 @@
 // this value should not be a constant at all -- it should be chosen dynamically
 // based off of the graph G and the initial max degree or degree distribution
 // of the graph.
-uintE INIT_VALUE_FOR_SIZE = 2;
+uintE INIT_VALUE_FOR_SIZE = 10;
 
 
 
@@ -130,12 +130,15 @@ struct dynamic_symmetric_graph {
   /* called to delete the graph */
   std::function<void()> deletion_fn;
 
-  dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> v_data, size_t n, size_t m,
+  dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> &v_data, size_t n, size_t m,
     std::function<void()> _deletion_fn)
-      : v_data(v_data),
-        n(n),
+      : n(n),
         m(m),
         deletion_fn(_deletion_fn) {
+          this -> v_data = pbbslib::dyn_arr<dynamic_vertex_data>(v_data.size);
+          par_for(0,v_data.size,1,[&](size_t i) {
+            this -> v_data.A[i] = v_data.A[i];
+          });
   }
 
 
