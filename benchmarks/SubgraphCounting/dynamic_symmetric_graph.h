@@ -464,6 +464,14 @@ dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(symmetric_graph<
   pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
 
   dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dsg = dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
+
+  pbbs::sequence<uintE> v = pbbs::sequence<uintE>(G.n,[&](size_t i){return i;});
+  dsg.batchAddVertices(v);
+
+  for(int i = 0;i < G.n;i++) {
+    pbbs::sequence<uintE> s = pbbs::sequence<uintE>(G.get_vertex(i).degree,[&](size_t j){return G.get_vertex(i).getOutNeighbor(j);});
+    dsg.batchAddEdges(i,s);
+  }
   
   return dsg;
 }
