@@ -185,32 +185,44 @@ struct dynamic_symmetric_graph {
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
 
+
     pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
     uintE ma = pbbs::reduce(vertices,monoidm);
-
 
     if(ma >= v_data.size) {
       v_data.resize(1 << (int)ceil(log2(ma)) + 1);
     }
+
+    pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(size,[&](size_t i){return !v_data.A[vertices[i]].entries.alloc;});
+    pbbs::addm<uintE> am = pbbs::addm<uintE>();
+    uintE sumV = pbbs::reduce(ds,am);
+    v_data.size += sumV;
+
+
     par_for(0,size,1,[&](size_t i) {
-      uintE id = vertices[i];
-      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-      pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(1);
-    
-      v_data.A[id].neighbors = tmp;
-      v_data.A[id].degree = 0;
-      v_data.A[id].entries = entries;
+      if(!v_data.A[vertices[i]].entries.alloc) {
+
+        uintE id = vertices[i];
+        sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+        pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(1);
+      
+        v_data.A[id].neighbors = tmp;
+        v_data.A[id].degree = 0;
+        v_data.A[id].entries = entries;
+
+      }
     });
 
-    this -> n += size;
+
+    this -> n += sumV;
+
 
 
   }
 
-  // TODO: Put in a wrapper function that does batch-parallel vertex and 
-  // edge additions/deletions. It should take as input an array or function, and a size,
-  // and it will add and delete all vertices/edges in that input in parallel.
   void addVertex(uintE id) {
+
+    if(v_data.size >= id && v_data.A[id].entries.alloc) return;
 
     if(id >= v_data.size) v_data.resize(1 << (int)ceil(log2(id)) + 1);
 
@@ -223,6 +235,7 @@ struct dynamic_symmetric_graph {
     v_data.A[id].entries = entries;
 
     this -> n++;
+    v_data.size++;
   }
 
   bool existEdge(uintE v,uintE u) {
@@ -245,7 +258,12 @@ struct dynamic_symmetric_graph {
 
   void batchAddEdges(uintE u,sequence<uintE> edges) {
 
-    this -> m += edges.size();
+
+    pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(edges.size(),[&](size_t i){return !existEdge(u,edges[i]);});
+    pbbs::addm<uintE> am = pbbs::addm<uintE>();
+    uintE sumW = pbbs::reduce(ds,am);
+
+    this -> m += sumW;
     _checkSize(u,edges.size());
 
 
@@ -254,16 +272,18 @@ struct dynamic_symmetric_graph {
 
     v_data.A[u].degree += edges.size();
     par_for(0,edges.size(),1,[&](size_t i) {
-      uintE v = edges[i];
-      _checkSize(v,1);
+      if(!existEdge(u,edges[i])) {
+        uintE v = edges[i];
+        _checkSize(v,1);
 
-      //cout << "No segmentation fault yet " << i << endl;
-      v_data.A[v].neighbors.insert(std::make_tuple(u,true));
-      v_data.A[v].entries.push_back(std::make_tuple(u,0));
-      v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
-      v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+        //cout << "No segmentation fault yet " << i << endl;
+        v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+        v_data.A[v].entries.push_back(std::make_tuple(u,0));
+        v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
+        v_data.A[u].neighbors.insert(std::make_tuple(v,true));
 
-      v_data.A[v].degree++;
+        v_data.A[v].degree++;
+      }
 
     });
   }
@@ -272,6 +292,7 @@ struct dynamic_symmetric_graph {
   // Btw this cannot be used in parallel.
   void addEdge(uintE v,uintE u) {
     // TODO: Add something to prevent non-existant vertices to connect each other. Or if an already existing edge
+    if(existEdge(u,v)) return;
     this -> m++;
     _checkSize(v,1);
     _checkSize(u,1);
@@ -434,4 +455,15 @@ dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricG
   pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
 
   return dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
+}
+
+
+template <template <class W> class vertex_type, class W>
+dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(symmetric_graph<symmetric_vertex,pbbs::empty> G) {
+  std::function<void()> doNothing = []() {};
+  pbbslib::dyn_arr<dynamic_vertex_data> _vData = pbbslib::dyn_arr<dynamic_vertex_data>(1);
+
+  dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dsg = dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing);
+  
+  return dsg;
 }
