@@ -86,6 +86,7 @@ struct dynamic_symmetric_vertex {
 
   edges_type getInNeighbors() { return neighbors; }
   edges_type getOutNeighbors() { return neighbors; }
+  // TODO: I don't think you need to use "this" since it's unambiguous what entries is
   uintE getInNeighbor(uintE j) { return std::get<0>(this -> entries.A[j]); }
   uintE getOutNeighbor(uintE j) { return std::get<0>(this -> entries.A[j]); }
   W getInWeight(uintE j) { return std::get<1>(this -> entries.A[j]); }
@@ -130,6 +131,8 @@ struct dynamic_symmetric_graph {
   /* called to delete the graph */
   std::function<void()> deletion_fn;
 
+  // TODO: Don't overload names; stylistically, we would use _v_data as the input
+  // name, and set v_data(_v_data) or something along those lines.
   dynamic_symmetric_graph(pbbslib::dyn_arr<dynamic_vertex_data> &v_data, size_t n, size_t m,
     std::function<void()> _deletion_fn)
       : n(n),
@@ -186,18 +189,30 @@ struct dynamic_symmetric_graph {
     size_t size = vertices.size();
 
 
+    // Find max ew vertices that must be added
     pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
     uintE ma = pbbs::reduce(vertices,monoidm);
 
+    // Resize vertex array if necessary
+    // TODO: Why is this comparison with .size instead of .capacity?
     if(ma >= v_data.size) {
+      // TODO: First, don't cast to int, cast to long or size_t -- chances
+      // are we'll exceed int. Second, I think you need to subtract here
+      // the current v_data.size in your resizing factor -- look at the
+      // resizing code in dyn_arr. Or, you can just resize to
+      // vertices.size(), and it should handle the log automatically for you.
       v_data.resize(1 << (int)ceil(log2(ma)) + 1);
     }
 
+    // TODO: Maybe it would be better here to use a delayed sequence, so we're not actually creating all of this space.
+    // Alternatively, don't just use addm in the reduce -- iterate through v_data.A or something and write your
+    // own monoid to retrieve whether it's allocated or not, and pass the monoid directly into reduce.
     pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(size,[&](size_t i){return !v_data.A[vertices[i]].entries.alloc;});
-    pbbs::addm<uintE> am = pbbs::addm<uintE>();
-    uintE sumV = pbbs::reduce(ds,am);
+    uintE sumV = pbbs::reduce(ds, pbbs::addm<uintE>());
+    // TODO: What are you doing with v_data.size here? /Why are you overloading v_data.size to keep track of which
+    // vertex_data entries have been allocated? Shouldn't the size be given when you do a batch addition to 
+    // dyn_arr?
     v_data.size += sumV;
-
 
     par_for(0,size,1,[&](size_t i) {
       if(!v_data.A[vertices[i]].entries.alloc) {
@@ -224,8 +239,8 @@ struct dynamic_symmetric_graph {
 
     if(v_data.size >= id && v_data.A[id].entries.alloc) return;
 
+    // TODO: Same issue with resizing as above.
     if(id >= v_data.size) v_data.resize(1 << (int)ceil(log2(id)) + 1);
-
 
     sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
@@ -260,8 +275,7 @@ struct dynamic_symmetric_graph {
 
 
     pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(edges.size(),[&](size_t i){return !existEdge(u,edges[i]);});
-    pbbs::addm<uintE> am = pbbs::addm<uintE>();
-    uintE sumW = pbbs::reduce(ds,am);
+    uintE sumW = pbbs::reduce(ds, pbbs::addm<uintE>());
 
     this -> m += sumW;
     _checkSize(u,edges.size());

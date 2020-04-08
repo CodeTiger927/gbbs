@@ -89,11 +89,27 @@ namespace pbbslib {
       size++;
     }
 
+    // TODO: What do you mean by "does not maintain order"?
+    // TODO: You have to be careful about using this kind of stuff when you
+    // want to remove an element from dyn_arr, because it will leave
+    // gaps in your array that you have to deal with in your code.
+    // This is lazy deletion. Probably, it's better to have a wrapper
+    // around dyn_arr that's for dynamic insertion/deletion,
+    // that will keep an "empty" value (as sparse table does), and
+    // then lazily delete by putting in empty values. It should then
+    // try and keep track of how many deletions create holes in your 
+    // array, and at some bound go in and compress everything 
+    // to be in order again. When it retrieves elements,
+    // it'll go to some upper limit count that is given based off of 
+    // how many holes we've allowed through deletions, and it'll
+    // filter out empty elements.
+    // TODO: Also, you may want to put in a batch erase so it's parallel.
     //Erase does not maintain order (does it have to?)
     inline void erase(E val) {
       size_t index = indexOf(val);
 
       if (index < size - 1) {
+        // TODO: Why would you replace with the last element?
         A[index] = A[size - 1]; //Replaces value with last element
       }
       size--; //Decreases size
@@ -101,15 +117,15 @@ namespace pbbslib {
 
     //Similar to sparse_table implementation
     inline size_t indexOf(E val) {
-
+      // TODO: Don't use int. Use size_t. We'll exceed int, and note
+      // that size is of type size_t -- always good practice to match types.
       for (int i = 0; i < size; i++) {
-
-        if (A[i] == val) {
-          return i;
-        }
-
+        if (A[i] == val) return i;
       }
-
+      // TODO: Generally, our vertex neighbor lists will be sorted.
+      // If this is what you're looking up into, you should not have
+      // this kind of indexOf function -- instead, use a binary search.
+      // (We have binary search implementations).
       return -1;
     }
 
