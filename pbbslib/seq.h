@@ -211,6 +211,18 @@ namespace pbbs {
       }
     }
 
+
+    //New Function
+    //Resizes array and fills with elements
+    void resize(size_t size, T fill) {
+      auto ns = pbbs::new_array_no_init<T>(size, true);
+      parallel_for(0, size, [&] (size_t i) {
+        ns[i] = i < n ? s[i] : fill;  
+      });
+      s = ns;
+      n = size;
+    }
+
   private:
     template <class Seq>
     void copy_here(Seq const &a, size_t an) {

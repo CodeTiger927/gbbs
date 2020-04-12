@@ -9,6 +9,7 @@
 #include "dyn_arr_sym_graph.h"
 #include "ligra/pbbslib/sparse_table.h"
 #include "ligra/pbbslib/dyn_arr.h"
+#include "pbbslib/sequence.h"
 
 // New Code for HSet
 // For hashing sparse table
@@ -29,24 +30,17 @@ struct HSet {
 
   sparse_table<uintE, pbbs::empty, hash_uintE> P;
 
-  pbbslib::dyn_arr<uintE> B; //Set of elements such that deg(x) == |H|
+  //pbbs::sequence<uintE> B; //Set of elements such that deg(x) == |H| Don't think I need this for the batch insert
 
-  sequence<pbbslib::dyn_arr<uintE>*> lowDegC; //Map of elements not in H sorted by degree up to a threshold
-  sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE> highDegC; // Map of elements not in H sorted by degree greater than the threshold
+  pbbs::sequence<pbbs::sequence<uintE>*> lowDegC; //Map of elements not in H sorted by degree up to a threshold
+  sparse_table<uintE, pbbs::sequence<uintE>*, hash_uintE> highDegC; // Map of elements not in H sorted by degree greater than the threshold
   uintE threshold;
-
-  // Makes it easier for sparse_table.find() which needs a default value
-  pbbslib::dyn_arr<uintE>* empty;
-
 
 
   //a - threshold for low and high degree vertices
   HSet(uintE a, symmetric_graph<symmetric_vertex, pbbs::empty> _G) {
 
     // TODO: Why can't this be nullptr?
-    auto e = pbbslib::dyn_arr<uintE>(0);
-    empty = &e; 
-
     G = &_G;
     threshold = a;
 
@@ -58,72 +52,221 @@ struct HSet {
     P = make_sparse_table<uintE, pbbs::empty, hash_uintE>
       (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
 
-    B = pbbslib::dyn_arr<uintE>(G->n);
+    //B = pbbs::sequence<uintE>(G->n);
 
     // C = make_sparse_table<uintE, sparse_table<uintE, pbbs::empty, hash_uintE>, hash_uintE>
       // (n, std::make_tuple(UINT_E_MAX, empty), hash_uintE());
 
-    lowDegC = sequence<pbbslib::dyn_arr<uintE>*>(a); //possible degrees range from 0 ... a - 1
+    lowDegC = sequence<pbbs::sequence<uintE>*>(a); //possible degrees range from 0 ... a - 1
     // TODO: You can reduce the search space of highDegC by taking G->n - threshold
     // It won't make a huge difference, but maybe it'll be better for the hash
     // function to distribute these values evenly, since we don't have any
     // values in ehre from 0 .. threshold
-    highDegC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
-      (G->n, std::make_tuple(UINT_E_MAX, new pbbslib::dyn_arr<uintE>(0)), hash_uintE());
+    highDegC = make_sparse_table<uintE, pbbs::sequence<uintE>*, hash_uintE>
+      (G->n, std::make_tuple(UINT_E_MAX, nullptr), hash_uintE());
 
-    par_for(0, lowDegC.size(), [&] (size_t i) { lowDegC[i] = nullptr; });
+    par_for(0, lowDegC.size(), [&] (size_t i) { lowDegC[i] = new sequence<uintE>(0); });
 
   }
 
   // TODO: Is this parallel? Can we make this batch-parallel or is it thread-safe?
-  uintE insert(uintE v) {
+  uintE insert(sequence<uintE> batch) {
 
-    //ADD TO GRAPH!!
-    auto deg = G->get_vertex(v).getOutDegree();
-    addToC(v);
+    //Adding stuff to C
+    //This might be really inefficient because it allocates space for each vertex in every entry for C
+    //Then it filters out the ones not used (which are most of them)
 
-    if(deg > hindex) {
 
-      H.insert(std::make_tuple(v, pbbs::empty()));
-      hindex++;
+    sequence<uintE> deg = pbbs::sequence<uintE>(batch.size());
 
-      if(B.size != 0) {
-        auto y = B.A[0];
-        B.erase(y);
-        H.erase(y);
-        hindex--;
 
-        addToC(y);
+    //---------------------------ADDS TO C-------------------------------------//
+
+    //Offsets prevents overriding current vertex entries
+
+    //Resizes lowDegC and fills offsets
+    sequence<uintE> lowDegCOffset = pbbs::sequence<uintE>(lowDegC.size());
+    par_for(0, lowDegC.size(), [&] (size_t i) {
+      lowDegCOffset[i] = lowDegC[i]->size();
+      lowDegC[i]->resize(batch.size() + lowDegC[i]->size(), UINT_E_MAX); //Fills with empty value which will be filtered later
+    });
+
+
+    //Resizes highDegC and fills offsets
+    auto entries = highDegC.entries();
+    //Will sparse_table slow this down?
+    auto highDegCOffsets = make_sparse_table<uintE, uintE, hash_uintE>
+      (entries.size(), std::make_tuple(UINT_E_MAX, UINT_E_MAX), hash_uintE());
+    //Clears C, using entries, adds them back to C in parallel
+    highDegC.clear();
+
+    //Resizes arrays and then adds them back to C
+    par_for(0, entries.size(), [&] (size_t i) {
+      highDegCOffsets.insert(std::make_tuple(std::get<0>(entries[i]), std::get<1>(entries[i])->size()));
+      std::get<1>(entries[i])->resize(batch.size() + std::get<1>(entries[i])->size(), UINT_E_MAX); //Fills with empty values which will be filtered later
+      highDegC.insert(std::make_tuple(std::get<0>(entries[i]), std::get<1>(entries[i])));
+    });
+
+
+    //Adds vertices to C
+    par_for(0, batch.size(), [&] (size_t i) {
+    //for (size_t i = 0; i < batch.size(); i++) {
+
+      deg[i] = G->get_vertex(batch[i]).getOutDegree();
+      if (deg[i] < threshold) {
+        (*lowDegC[deg[i]])[i + lowDegCOffset[deg[i]]] = batch[i];
       }
-
       else {
-        // If C has entry for |H|, set that to B. Otherwise B is empty
-        if (containedInC(hindex)) {
-          
-          if (hindex > threshold) {
-            B = *highDegC.find(hindex, empty);
-            highDegC.erase(hindex);
+
+        //Degree entry in C
+        if (highDegC.find(deg[i], nullptr) != nullptr) {
+
+          //Degree already had entry in C
+          if (highDegCOffsets.find(deg[i], UINT_E_MAX) != UINT_E_MAX) {
+            (*highDegC.find(deg[i], nullptr))[i + highDegCOffsets.find(deg[i], UINT_E_MAX)] = batch[i];
           }
-          else {
-            B = *lowDegC[hindex];
-            lowDegC[hindex]->clear();
+          //Degree entry was just added in this batch
+          else  {
+            (*highDegC.find(deg[i], nullptr))[i] = batch[i];
           }
         }
-
+        
+        //Degree entry not in C, needs to add
         else {
-          B.clear();
+
+          //I don't know if this will cause problems in parallel
+          sequence<uintE>* s = new pbbs::sequence<uintE>(0);
+          s->resize(batch.size(), UINT_E_MAX);
+          highDegC.insert(std::make_tuple(deg[i], s));
+          //highDegC.find(deg[i], nullptr)->resize(batch.size(), UINT_E_MAX);
+          (*highDegC.find(deg[i], nullptr))[i] = batch[i];
         }
-
       }
-    }
+    });
+    //}
+    
 
+    //Filters out empty spaces (removes gaps)
+    //Offsets re-used because we need the new sizes
+    auto f = [&] (uintE i) { return i != UINT_E_MAX; };
+
+    par_for(0, lowDegC.size(), [&] (size_t idx) {
+      auto filtered = pbbslib::filter(*lowDegC[idx], f);
+      lowDegC[idx] = &filtered;
+      lowDegCOffset[idx] = lowDegC[idx]->size();
+    });
+
+    entries = highDegC.entries();
+    entries = pbbslib::sample_sort(entries, [&](const std::tuple<uintE, pbbs::sequence<uintE>*> deg1, const std::tuple<uintE, pbbs::sequence<uintE>*> deg2) {
+      return std::get<0>(deg1) > std::get<0>(deg2); //Greater than gives degrees from greatest to least
+    }, false); //Don't think I need it to be stable
+
+    //I tried "highDegCOffsets.clear()" but for some reason it would take a really long time to execute line 164 (calling insert)
+    sequence<std::tuple<uintE, uintE>> highDegCSizes = sequence<std::tuple<uintE, uintE>>(entries.size());
+    
+    highDegC.clear(); //Clears C so they can be readded
+    par_for(0, entries.size(), [&] (size_t idx) {
+    //for (int idx = 0; idx < entries.size(); idx++) {
+      auto filtered = pbbs::filter(*std::get<1>(entries[idx]), f);
+      highDegC.insert(std::make_tuple(std::get<0>(entries[idx]), &filtered));
+      highDegCSizes[idx] = std::make_tuple(std::get<0>(entries[idx]), filtered.size());
+      
+    //}
+    });
+
+    
+    //-------------------------Computes H-index--------------------------------//
+    
+    //auto highDegCSizes = highDegCOffsets.entries();
+    
+    auto fx = [&] (std::tuple<uintE, uintE> T) { return std::get<0>(T) > hindex; };
+    highDegCSizes = pbbs::filter(highDegCSizes, fx); //Filters out all degrees that are less than H
+    
+    
+    
+    
+    sequence<uintE> prefix_sum = sequence<uintE>(highDegCSizes.size());
+
+    par_for(0, prefix_sum.size(), [&] (size_t i){
+      prefix_sum[i] = std::get<1>(highDegCSizes[i]);
+    });
+    //Prefix sum so each degree knows how many vertices have degree greater than it
+    
+    auto temp = sequence<uintE>(prefix_sum);
+
+    cout << "SIZE   " << highDegC.find(3, nullptr)->size() << endl; //C is fine right here
+    pbbslib::scan_add_inplace(prefix_sum); //Computes exclusive prefix sum
+    cout << "SIZE   " << highDegC.find(3, nullptr)->size() << endl; //But it gets scrambled heregf
+    
+    par_for(0, prefix_sum.size(), [&] (size_t i) {
+      //Subtracts degree so all nonnegative numbers are potential h-indices
+      prefix_sum[i] += std::get<1>(highDegCSizes[i]) - std::get<0>(highDegCSizes[i]); //Adds the size of it's own entry because prefix sum was exclusive
+    });
+    
+    auto hFilter = [&] (uintE size) { return size >= 0; };
+    auto hindices = pbbs::filter(prefix_sum, hFilter); //Possible h-indices
+    
+    
+    //H-index is less than threshold (so search in lowDegC)
+    if (hindices.size() == 0) {
+
+      prefix_sum = lowDegCOffset.rslice(lowDegCOffset.size(), hindex);
+      pbbslib::scan_add_inplace(prefix_sum);
+      hindices = pbbs::filter(prefix_sum, f);
+
+      par_for(0, prefix_sum.size(), [&] (size_t i) {
+        //Subtracts degree so all nonnegative numbers are potential h-indices
+        prefix_sum[i] += lowDegCOffset[i] - i; //Adds the size of it's own entry because prefix sum was exclusive
+      });
+      hindices = pbbs::filter(prefix_sum, hFilter);
+
+      hindex = pbbslib::binary_search(prefix_sum, hindices[0], std::less<size_t>());
+      
+      H = make_sparse_table<uintE, pbbs::empty, hash_uintE>
+        (2 * hindex, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+
+      //THIS DOESN'T WORK YET (supposed to update H)
+      par_for(0, lowDegC.size(), [&] (size_t i) {
+        if (i >= hindex) {
+
+          par_for(0, lowDegC[i]->size(), [&] (size_t v) {
+            H.insert(std::make_tuple((*lowDegC[i])[v], pbbs::empty()));
+          });
+        }
+      });
+
+
+    }
+    else {
+      size_t idx = pbbslib::binary_search(prefix_sum, hindices[0], std::less<size_t>());
+      hindex = std::get<0>(highDegCSizes[idx]);
+      H = make_sparse_table<uintE, pbbs::empty, hash_uintE>
+        (2 * hindex, std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
+    }
+    //THIS DOESN'T WORK YET (supposed to update H)
+    par_for(0, entries.size(), [&] (size_t i) {
+    //for(size_t i = 0; i < entries.size(); i++) {
+      if (std::get<0>(entries[i]) >= hindex) {
+        par_for(0, std::get<1>(entries[i])->size(), [&] (size_t v) {
+        //for (int v = 0; v < std::get<1>(entries[i])->size(); v++) {
+
+          H.insert(std::make_tuple((*std::get<1>(entries[i]))[v], pbbs::empty())); //SOMETHING HERE IS WRONG
+
+        });
+        //}
+      }
+    //}
+    });
+    
+   
     return hindex;
 
   }
 
+
    
   uintE erase(uintE v) {
-
+/*
     // Remove from Graph!!
 
     auto deg = G->get_vertex(v).getOutDegree();
@@ -175,12 +318,12 @@ struct HSet {
 
       }
     }
-
+*/
     return hindex;
   }
 	
   uintE change(uintE v) {
-
+/*
     erase(v);
     insert(v);
 
@@ -189,12 +332,12 @@ struct HSet {
     if (G->get_vertex(v).getOutDegree() >= 2 * hindex) {
       P.insert(std::make_tuple(v, pbbs::empty()));
     }
-
+*/
     return hindex;
   }
 
   void addToC(uintE v) {
-
+/*
     uintE deg = G->get_vertex(v).getOutDegree();
     auto vertices = highDegC.find(deg, empty); //Vertices of degree "deg"
 
@@ -209,15 +352,15 @@ struct HSet {
     // Add to lowDegC
     else {
       if (lowDegC[deg] == nullptr) {
-        lowDegC[deg] = new pbbslib::dyn_arr<uintE>(G->n);
+        lowDegC[deg] = new pbbs::sequence<uintE>(G->n);
       }
       lowDegC[deg]->add(v);
     }
-
+*/
   }
 
   void removeFromC(uintE v) { // Assumes v is in C
-    
+    /*
     uintE deg = G->get_vertex(v).getOutDegree();
     
     //Remove from highDegC
@@ -235,9 +378,11 @@ struct HSet {
 
       lowDegC[deg]->erase(v);
     }
+*/
   }
 
   bool containedInC(uintE deg) {
+/*
     if (deg > threshold) {
 
       return highDegC.contains(deg);
@@ -248,7 +393,7 @@ struct HSet {
       }
       return lowDegC[deg]->size != 0;
     }
-    
+   */ 
   }
 
 };

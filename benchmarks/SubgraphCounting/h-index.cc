@@ -1,4 +1,17 @@
 #include "h-index.h"
+#include <iostream>
+
+int main() {
+
+  auto G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
+  HSet h = HSet(2, G);
+  sequence<uintE> batch = sequence<uintE>(6);
+  par_for(0, 6, [&] (size_t i) {
+    batch[i] = i;
+  });
+
+  cout << "New |H|" << h.insert(batch) << endl;
+}
 
 /*
 int main() {
@@ -43,7 +56,7 @@ int main() {
   return 0;
 }
 */
-
+/*
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -87,4 +100,4 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 }
 
 generate_symmetric_main(AppHIndex_runner, false);
-
+*/
