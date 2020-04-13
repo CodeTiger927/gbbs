@@ -1,5 +1,9 @@
 #include "h-index.h"
+#include "TriangleCounting.h"
 #include <iostream>
+
+
+
 
 int main() {
 
@@ -7,7 +11,7 @@ int main() {
   HSet h = HSet(2, G);
   sequence<uintE> batch = sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
-    batch[i] = i;
+    batch[i] = (2 * i) % 6;
   });
 
   cout << "New |H|" << h.insert(batch) << endl;
