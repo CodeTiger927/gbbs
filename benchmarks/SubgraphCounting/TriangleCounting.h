@@ -1,17 +1,6 @@
-#include <iostream>
-#include <map>
-#include <set>
-#include <limits>
-#include <vector>
-#include <math.h>
-#include "ligra/ligra.h"
 #include "dynamic_symmetric_graph.h"
-#include "dyn_arr_sym_graph.h"
-#include "ligra/pbbslib/sparse_table.h"
-#include "ligra/pbbslib/dyn_arr.h"
-#include "pbbslib/sequence.h"
 
-uintE N;
+uintE N = 10;
 
 dynamic_symmetric_graph<dynamic_symmetric_vertex,uintE> dsg;
 HSet hset = nullptr;

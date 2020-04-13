@@ -1,5 +1,4 @@
 #include "h-index.h"
-#include "TriangleCounting.h"
 #include <iostream>
 
 
