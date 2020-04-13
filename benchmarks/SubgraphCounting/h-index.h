@@ -21,6 +21,49 @@
 
 //TODO: same notes as on h-index2
 
+
+// TODO: we can talk about this more tonight, but I wasn't quite sure exactly what you
+// were doing with the resizings and H set -- this is how I think the h-index code should go.
+template<class Graph>
+struct HSet2 {
+  Graph* G = nullptr;
+  pbbs::sequence<uintE*> C;
+  pbbs::sequence<uintE> B;
+  size_t h_index = 0;
+  pbbs::sequence<uintE> old_degrees;
+
+  HSet2(Graph* _G, pbbs::sequence<uintE> _old_degrees) : G(_G), old_degrees(_old_degrees) {}
+
+  // Note: This batch is for vertices that move "up" -- their degrees increase only,
+  // and H cannot decrease
+  // We'll have another function for vertices whose degrees decrease only.
+  uintE insert_additions(sequence<uintE>& batch) {
+    // Note: G must already be updated with the new degrees of vertices in batch, but we should separately
+    // keep an array with old degrees, that holds the degree state of the graph from before the update
+    // First, remove the vertices in batch from C
+      // Do this by looking up old degrees
+    // Then, add the new degrees to C
+      // Do this by making an array with each entry as deg(v) for v in batch, and do a sort
+      // Then, subtract each element in the array from its previous element
+      // Do a filter that compresses and returns the indices of the 1 elements
+      // These indices tell you how many elements have each new degree, which we can use to figure out what should be increased
+    // Filter from batch all elements with new degree <= |H|
+    // From intersection of batch and B, remove these elements from both (degree must have increased)
+    // Now, if |batch| <= |B|, remove |B| - |batch| elements from B
+    // Otherwise, empty B and remove the lowest |B| elements from |batch|
+       // The rest will increase our h index
+       // To find out by how much, make an array with each entry as deg(v) - h_index for v in batch
+       // Do a sort, then make a marking array where you mark any entry that's less than or equal to its index
+       // Do a reduce for the minimum index that's marked -- this is how much our h-index is increased by
+       // The entry in C for new h-index becomes our new B
+  }
+
+};
+
+
+
+
+
 struct HSet {
 
   symmetric_graph<symmetric_vertex, pbbs::empty>* G; //Graph
@@ -85,16 +128,20 @@ struct HSet {
     //Offsets prevents overriding current vertex entries
 
     //Resizes lowDegC and fills offsets
+    // TODO: Why are you resizing each block in lowDegC? You should only resize if you
+    // need the space. Figure out what space you need first, then do all of 
+    // the necessary resizing.
     sequence<uintE> lowDegCOffset = pbbs::sequence<uintE>(lowDegC.size());
     par_for(0, lowDegC.size(), [&] (size_t i) {
       lowDegCOffset[i] = lowDegC[i]->size();
       lowDegC[i]->resize(batch.size() + lowDegC[i]->size(), UINT_E_MAX); //Fills with empty value which will be filtered later
     });
 
-
+    // TODO: Why do you need to take out all of the elements in highDegC?
     //Resizes highDegC and fills offsets
     auto entries = highDegC.entries();
     //Will sparse_table slow this down?
+    // TODO: Probably yes; if we can avoid it it'd be better.
     auto highDegCOffsets = make_sparse_table<uintE, uintE, hash_uintE>
       (entries.size(), std::make_tuple(UINT_E_MAX, UINT_E_MAX), hash_uintE());
     //Clears C, using entries, adds them back to C in parallel
