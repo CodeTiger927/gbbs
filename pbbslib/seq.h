@@ -223,6 +223,16 @@ namespace pbbs {
       n = size;
     }
 
+    void append(const sequence a) {
+      auto ns = pbbs::new_array_no_init<T>(n + a.size());
+      parallel_for(0, n + a.size(), [&] (size_t i) {
+        ns[i] = i < n ? s[i] : a[i - n];
+      });
+      s = ns;
+      n = n + a.size();
+      
+    }
+
   private:
     template <class Seq>
     void copy_here(Seq const &a, size_t an) {

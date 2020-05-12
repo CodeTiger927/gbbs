@@ -2,15 +2,17 @@
 #include <iostream>
 
 int main() {
-
+  
   auto G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
-  HSet h = HSet(2, G);
+  HSet h = HSet(100, G);
   sequence<uintE> batch = sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
     batch[i] = i;
   });
+  h.insert(batch);
 
-  cout << "New |H|" << h.insert(batch) << endl;
+  cout << "H-INDEX: " << h.hindex << endl;
+  
 }
 
 /*
@@ -18,7 +20,7 @@ int main() {
 
   // TODO: use integrated ligra main
   // e.g.,
-  //template <class Graph>
+  //template <class Graph>r
   //double AppKCore_runner(Graph& GA, commandLine P) {
   //}
   //generate_symmetric_main(AppKCore_runner, false);

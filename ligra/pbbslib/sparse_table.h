@@ -245,6 +245,12 @@ class sparse_table {
     return default_value;
   }
 
+  //NEW
+  void change(K k, V val) {
+    size_t index = idx(k);
+    table[index] = std::make_tuple(k, val);
+  }
+
   void erase(K k) { // Assumes that k is in sparse_table
     
     size_t index = idx(k);
