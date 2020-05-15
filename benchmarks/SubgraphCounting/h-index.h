@@ -21,6 +21,49 @@
 
 //TODO: same notes as on h-index2
 
+
+// TODO: we can talk about this more tonight, but I wasn't quite sure exactly what you
+// were doing with the resizings and H set -- this is how I think the h-index code should go.
+template<class Graph>
+struct HSet2 {
+  Graph* G = nullptr;
+  pbbs::sequence<uintE*> C;
+  pbbs::sequence<uintE> B;
+  size_t h_index = 0;
+  pbbs::sequence<uintE> old_degrees;
+
+  HSet2(Graph* _G, pbbs::sequence<uintE> _old_degrees) : G(_G), old_degrees(_old_degrees) {}
+
+  // Note: This batch is for vertices that move "up" -- their degrees increase only,
+  // and H cannot decrease
+  // We'll have another function for vertices whose degrees decrease only.
+  uintE insert_additions(sequence<uintE>& batch) {
+    // Note: G must already be updated with the new degrees of vertices in batch, but we should separately
+    // keep an array with old degrees, that holds the degree state of the graph from before the update
+    // First, remove the vertices in batch from C
+      // Do this by looking up old degrees
+    // Then, add the new degrees to C
+      // Do this by making an array with each entry as deg(v) for v in batch, and do a sort
+      // Then, subtract each element in the array from its previous element
+      // Do a filter that compresses and returns the indices of the 1 elements
+      // These indices tell you how many elements have each new degree, which we can use to figure out what should be increased
+    // Filter from batch all elements with new degree <= |H|
+    // From intersection of batch and B, remove these elements from both (degree must have increased)
+    // Now, if |batch| <= |B|, remove |B| - |batch| elements from B
+    // Otherwise, empty B and remove the lowest |B| elements from |batch|
+       // The rest will increase our h index
+       // To find out by how much, make an array with each entry as deg(v) - h_index for v in batch
+       // Do a sort, then make a marking array where you mark any entry that's less than or equal to its index
+       // Do a reduce for the minimum index that's marked -- this is how much our h-index is increased by
+       // The entry in C for new h-index becomes our new B
+  }
+
+};
+
+
+
+
+
 struct HSet {
 
   symmetric_graph<symmetric_vertex, pbbs::empty>* G; //Graph
@@ -98,34 +141,35 @@ struct HSet {
     pbbs::sequence<uintE> lowDegSum = pbbs::sequence<uintE>(0);
     pbbs::sequence<std::tuple<uintE, uintE>> highDegs;
     
-    //Slices the entries in D that are between |H| and (|H| + |Batch|)
-    if (hindex > threshold) {
-      //Completely in highDegD
-      auto inRange = [&] (std::tuple<uintE, uintE> deg) { return (std::get<0>(deg) > hindex + 1) && (std::get<0>(deg) < hindex + batch.size() + 1); };
-      highDegs = pbbs::filter(highDegD.entries(), inRange);
-      highDegs = pbbslib::sample_sort(highDegs, [&] (const std::tuple<uintE, uintE> deg1, const std::tuple<uintE, uintE> deg2) { //Sort highDegs
-        return std::get<0>(deg1) < std::get<0>(deg2);
-      });
-      
-    }
-    else {
-      if (hindex + batch.size() > threshold) {
-        //Do both highDegSum part and lowDegSum part
-        lowDegSum = lowDegD.slice(hindex + 1, threshold);
-        auto inRange = [&] (std::tuple<uintE, uintE> deg) { return (std::get<0>(deg) > threshold) && (std::get<0>(deg) < hindex + batch.size() + 1); };
-        highDegs = pbbs::filter(highDegD.entries(), inRange);
-        highDegs = pbbslib::sample_sort(highDegs, [&] (const std::tuple<uintE, uintE> deg1, const std::tuple<uintE, uintE> deg2) { //Sort highDegs
-          return std::get<0>(deg1) < std::get<0>(deg2);
-        });
-        
-      }
-      else {
-        //Completely inside lowDegD
-        lowDegSum = lowDegD.slice(hindex + 1, hindex + batch.size() + 1);
-      }
-    }    
+   
+    lowDegSum = lowDegD.slice(hindex + 1, hindex + batch.size() + 1);    
 
-    
+
+
+    //---------------------------ADDS TO C-------------------------------------//
+
+    //Offsets prevents overriding current vertex entries
+
+    //Resizes lowDegC and fills offsets
+    // TODO: Why are you resizing each block in lowDegC? You should only resize if you
+    // need the space. Figure out what space you need first, then do all of 
+    // the necessary resizing.
+    sequence<uintE> lowDegCOffset = pbbs::sequence<uintE>(lowDegC.size());
+    par_for(0, lowDegC.size(), [&] (size_t i) {
+      lowDegCOffset[i] = lowDegC[i]->size();
+      lowDegC[i]->resize(batch.size() + lowDegC[i]->size(), UINT_E_MAX); //Fills with empty value which will be filtered later
+    });
+
+    // TODO: Why do you need to take out all of the elements in highDegC?
+    //Resizes highDegC and fills offsets
+    auto entries = highDegC.entries();
+    //Will sparse_table slow this down?
+    // TODO: Probably yes; if we can avoid it it'd be better.
+    auto highDegCOffsets = make_sparse_table<uintE, uintE, hash_uintE>
+      (entries.size(), std::make_tuple(UINT_E_MAX, UINT_E_MAX), hash_uintE());
+    //Clears C, using entries, adds them back to C in parallel
+    highDegC.clear();
+
 
     //Computes Prefix Sum (note scan_add_inplace is exclusive)
     //lowDeg
@@ -150,7 +194,7 @@ struct HSet {
       
     });
 
-    
+          
 
     //Find index of first 0
     pbbs::sequence<size_t> indexM = pbbs::sequence<size_t>(M.size());
@@ -158,45 +202,9 @@ struct HSet {
       indexM[i] = !M[i] ? i : UINT_E_MAX;
     });
 
-    uintE hindexIncrease = pbbslib::reduce_min(indexM);
-    if (hindexIncrease != UINT_E_MAX) {
-      hindex += hindexIncrease;
-    }
-    else { //Look for hindex increase only if it is NOT in lowDeg
-      cout << "GOOD but " << highDegs.size() << endl;
-      //highDeg
-      //Split information
-      pbbs::sequence<uintE> highDegSum = pbbs::sequence<uintE>(highDegs.size());
-      pbbs::sequence<uintE> highDegDegs = pbbs::sequence<uintE>(highDegs.size());
-      
-      par_for(0, highDegs.size(), [&] (size_t i) {
-        highDegSum[i] = std::get<1>(highDegs[i]);
-        highDegDegs[i] = std::get<0>(highDegs[i]);
-      });
-
-      pbbslib::scan_add_inplace(highDegSum);
-      par_for(0, batch.size() + 1, [&] (size_t i) {
-        highDegSum[i] += std::get<1>(highDegs[i]) + B.size() + lowDegSum[lowDegSum.size() - 1]; //Compute inclusive and add size of B
-      });
-
-      M = pbbs::sequence<bool>(highDegSum.size());
-
-      par_for(0, highDegSum.size(), [&] (size_t i) {
-        if (highDegSum[i] < deg.size()) {
-          M[i] = (deg[highDegSum[i]] > hindex + i + lowDegSum.size());
-        }
-        else {
-          M[i] = false;
-        }
-      });
-      pbbs::sequence<size_t> indexM = pbbs::sequence<size_t>(M.size());
-      par_for(0, M.size(), [&] (size_t i) {
-        indexM[i] = !M[i] ? i : UINT_E_MAX;
-      });
-
-      cout << "CONFIRM HINDEX: " << highDegDegs[pbbslib::reduce_min(indexM)] << endl;
-      hindex = highDegDegs[pbbslib::reduce_min(indexM) - 1];
-    }
+    
+    updateC(batch, deg);
+    
     
     //--------------------------ADD TO C--------------------------//
     //Subraction
@@ -243,65 +251,70 @@ struct HSet {
       }
     });
 
+    //--------------------------ADD TO C--------------------------//
+
+    uintE hindexIncrease = pbbslib::reduce_min(indexM);
+    if (hindexIncrease != UINT_E_MAX) {
+      hindex += hindexIncrease;
+    }
+    else {
+      hindex += batch.size();
+    }
+
     return hindex;
   }
 
    
   uintE erase(uintE v) {
-/*
-    // Remove from Graph!!
-
-    auto deg = G->get_vertex(v).getOutDegree();
-    if (B.indexOf(v) != -1) {
-      B.erase(v);
-    }
-
-    else {
-      removeFromC(v);
-    }
-    
-    if (H.contains(v)) {
-
-      auto h = hindex; //h is |H| before removing v
-      H.erase(v);
-      hindex--;
-
-      if (P.contains(v)) {
-        P.erase(v);
-      }
-
-      if (h > threshold) {
-
-       if (highDegC.find(h, empty)->size != 0) { //Has entry for C[h]
-          auto y = highDegC.find(h, empty)->A[0];
-          removeFromC(y);
-          B.add(y);
-          H.insert(std::make_tuple(y, pbbs::empty()));
-        }
-        else {
-          //highDegC.insert(std::make_tuple(h, *B));
-          //B.clear(); //Might change the value of the entry in C 
-
-          highDegC.insert(std::make_tuple(h, new pbbslib::dyn_arr(B))); //Creates pointer to copy of B
-          B.clear();
-        }
-      }
-      else {
-        if (lowDegC[h] != nullptr || lowDegC[h]->size != 0) { //Has entry for C[h]
-          auto y = lowDegC[h]->A[0];
-          removeFromC(y);
-          B.add(y);
-          H.insert(std::make_tuple(y, pbbs::empty()));
-        }
-        else {
-          lowDegC[h] = new pbbslib::dyn_arr(B); //Creates pointer to copy of B
-          B.clear();
-        }
-
-      }
-    }
-*/
+    //Implement later
     return hindex;
+  }
+
+  void updateC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
+    //--------------------------ADD TO C--------------------------//
+    //Subraction
+    sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
+    
+    par_for(0, deg.size() - 1, [&] (size_t i) {
+      difference[i] = (deg[i] != deg[i + 1]);  
+    });
+
+    sequence<size_t> indices = pbbs::sequence<size_t>(difference.size() + 1);
+
+    par_for(0, difference.size() + 1, [&] (size_t i) {
+      indices[i] = i;
+    });
+
+    auto f = [&] (size_t i) { return difference[i] || i == batch.size() - 1; };
+    indices = pbbs::filter(indices, f);
+    //Uses indices sequence to know the index of last entry for each clustered deg
+    par_for(0, indices.size(), [&] (size_t i) {
+      size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
+      size_t end = indices[i] + 1;
+
+      pbbs::sequence<uintE> extra = batch.slice(start, end);
+      
+      if (deg[i] > threshold) {
+        if (highDegC.find(deg[indices[i]], nullptr) == nullptr) {
+          highDegC.insert(std::make_tuple(deg[indices[i]], &extra));
+        }
+        else {
+          highDegC.find(deg[indices[i]], nullptr)->append(extra);
+        }
+
+        if (highDegD.find(deg[indices[i]], UINT_E_MAX) == UINT_E_MAX) {
+          highDegD.insert(std::make_tuple(deg[indices[i]], extra.size()));
+        }
+        else {
+          highDegD.change(deg[indices[i]], highDegD.find(deg[indices[i]], UINT_E_MAX) + extra.size()); 
+        }
+      }
+
+      else {
+        lowDegC[deg[indices[i]]]->append(extra);
+        lowDegD[deg[indices[i]]] += extra.size();
+      }
+    });
   }
 	
   uintE change(uintE v) {
