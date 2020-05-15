@@ -1,13 +1,16 @@
 #include "h-index.h"
 #include <iostream>
 
+
+
+
 int main() {
   
   auto G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
   HSet h = HSet(100, G);
   sequence<uintE> batch = sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
-    batch[i] = i;
+    batch[i] = (2 * i) % 6;
   });
   h.insert(batch);
 

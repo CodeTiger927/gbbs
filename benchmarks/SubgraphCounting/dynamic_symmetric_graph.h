@@ -50,8 +50,8 @@ struct hash_uintE {
 
 struct dynamic_vertex_data {
   uintE degree;  // vertex degree
-  sparse_table<uintE,bool,hash_uintE> neighbors;
-  pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries;
+  sparse_table<uintE,uintE,hash_uintE> neighbors;
+  pbbslib::dyn_arr<std::tuple<uintE,uintE>> entries;
 };
 
 
@@ -62,10 +62,10 @@ template <class W>
 struct dynamic_symmetric_vertex {
   using vertex = dynamic_symmetric_vertex<W>;
   using edge_type = std::tuple<uintE, W>;
-  using edges_type = sparse_table<uintE,bool,hash_uintE>;
+  using edges_type = sparse_table<uintE,uintE,hash_uintE>;
 
   uintE degree;
-  edges_type neighbors = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+  edges_type neighbors = make_sparse_table<uintE,uintE,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
   pbbslib::dyn_arr<edge_type> entries;
 
   dynamic_symmetric_vertex(dynamic_vertex_data& vdata) {
@@ -175,15 +175,6 @@ struct dynamic_symmetric_graph {
 //   }
 // #endif
 
-  /* degree must be <= old_degree */
-  void decrease_vertex_degree(uintE id, uintE degree) {
-    assert(degree <= v_data.A[id].degree);
-    v_data.A[id].degree = degree;
-  }
-
-  void zero_vertex_degree(uintE id) {
-    decrease_vertex_degree(id, 0);
-  }
 
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
@@ -193,15 +184,8 @@ struct dynamic_symmetric_graph {
     pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
     uintE ma = pbbs::reduce(vertices,monoidm);
 
-    // Resize vertex array if necessary
-    // TODO: Why is this comparison with .size instead of .capacity?
-    if(ma >= v_data.size) {
-      // TODO: First, don't cast to int, cast to long or size_t -- chances
-      // are we'll exceed int. Second, I think you need to subtract here
-      // the current v_data.size in your resizing factor -- look at the
-      // resizing code in dyn_arr. Or, you can just resize to
-      // vertices.size(), and it should handle the log automatically for you.
-      v_data.resize(1 << (int)ceil(log2(ma)) + 1);
+    if(ma >= v_data.capacity) {
+      v_data.resize((1 << (size_t)ceil(log2(ma)) + 1) - v_data.size);
     }
 
     // TODO: Maybe it would be better here to use a delayed sequence, so we're not actually creating all of this space.
@@ -218,7 +202,7 @@ struct dynamic_symmetric_graph {
       if(!v_data.A[vertices[i]].entries.alloc) {
 
         uintE id = vertices[i];
-        sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+        sparse_table<uintE,uintE,hash_uintE> tmp = make_sparse_table<uintE,uintE,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
         pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(1);
       
         v_data.A[id].neighbors = tmp;
@@ -231,16 +215,14 @@ struct dynamic_symmetric_graph {
 
     this -> n += sumV;
 
-
-
   }
 
   void addVertex(uintE id) {
 
-    if(v_data.size >= id && v_data.A[id].entries.alloc) return;
+    if(v_data.size > id && v_data.A[id].entries.alloc) return;
 
     // TODO: Same issue with resizing as above.
-    if(id >= v_data.size) v_data.resize(1 << (int)ceil(log2(id)) + 1);
+    if(id >= v_data.size) v_data.resize((1 << (size_t)ceil(log2(id)) + 1) - v_data.size);
 
     sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     pbbslib::dyn_arr<std::tuple<uintE, uintE>> entries = pbbslib::dyn_arr<std::tuple<uintE, uintE>>(0);
@@ -254,18 +236,34 @@ struct dynamic_symmetric_graph {
   }
 
   bool existEdge(uintE v,uintE u) {
-    return v_data.A[v].neighbors.find(u,false);
+    return v_data.A[v].neighbors.find(u,UINT_E_MAX) != UINT_E_MAX;
   }
 
   // TODO: What is this meant to do? Why the -10?
   void _checkSize(uintE v,uintE many) {
     if((int)v_data.A[v].entries.size > (0 + (int)v_data.A[v].entries.capacity - 10 - (int)many)) {
-      v_data.A[v].entries.resize(1 << (int)ceil(log2(v_data.A[v].entries.size + 10 + many)));
+      v_data.A[v].entries.resize(1 << (size_t)ceil(log2(v_data.A[v].entries.size + 10 + many)) - v_data.A[v].entries.size);
     }
     if((int)v_data.A[v].degree > (int)v_data.A[v].neighbors.m - (int)10 - (int)many) {
-      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m + many + 10)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+      sparse_table<uintE,uintE,hash_uintE> tmp = make_sparse_table<uintE,uintE,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m + many + 10)),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
       par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
-        tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),true));
+        tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),i));
+      });
+      v_data.A[v].neighbors = tmp;
+    }
+  }
+
+
+  // CheckSize For deletion
+  void __checkSize(uintE v,uintE many) {
+    if((int)(v_data.A[v].entries.size) - many < ((int)v_data.A[v].entries.capacity) >> 1) {
+      v_data.A[v].entries.resize(1 << (size_t)ceil(log2(v_data.A[v].entries.size - many)) - v_data.A[v].entries.size);
+    }
+
+    if((int)(v_data.A[v].degree) - many < (int)(v_data.A[v].neighbors.m) >> 1 ) {
+      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m - many)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+      par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
+        tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),i));
       });
       v_data.A[v].neighbors = tmp;
     }
@@ -291,10 +289,10 @@ struct dynamic_symmetric_graph {
         _checkSize(v,1);
 
         //cout << "No segmentation fault yet " << i << endl;
-        v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+        v_data.A[v].neighbors.insert(std::make_tuple(u,v_data.A[v].entries.size));
         v_data.A[v].entries.push_back(std::make_tuple(u,0));
         v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
-        v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+        v_data.A[u].neighbors.insert(std::make_tuple(v,ori + i));
 
         v_data.A[v].degree++;
       }
@@ -303,18 +301,89 @@ struct dynamic_symmetric_graph {
   }
 
 
+
   // Btw this cannot be used in parallel.
   void addEdge(uintE v,uintE u) {
     // TODO: Add something to prevent non-existant vertices to connect each other. Or if an already existing edge
+    //cout << "YES  " << u << " " << v << " " << existEdge(v,u) << endl;
     if(existEdge(u,v)) return;
     this -> m++;
     _checkSize(v,1);
     _checkSize(u,1);
-    v_data.A[v].neighbors.insert(std::make_tuple(u,true));
+    v_data.A[v].neighbors.insert(std::make_tuple(u,v_data.A[v].entries.size));
     v_data.A[v].entries.push_back(std::make_tuple(u,0));
-    v_data.A[u].neighbors.insert(std::make_tuple(v,true));
+    v_data.A[u].neighbors.insert(std::make_tuple(v,v_data.A[u].entries.size));
     v_data.A[u].entries.push_back(std::make_tuple(v,0));
   }
+
+  // TODO, check if the vertex has degree, if so then cannot delete
+  // Btw this cannot be used in parallel too.
+  void removeVertex(uintE id) {
+    if(v_data.size > id && !(v_data.A[id].entries.alloc)) return;
+
+    if(v_data.size - 1 < v_data.capacity >> 1) {
+      v_data.resize((v_data.capacity >> 1) - v_data.size);
+    }
+    v_data.A[id].neighbors.del();
+    v_data.A[id].degree = 0;
+    v_data.A[id].entries.del();
+  }
+
+  void batchRemoveVertices(sequence<uintE> & vertices) {
+    size_t size = vertices.size();
+
+    pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(size,[&](size_t i){return v_data.A[vertices[i]].entries.alloc;});
+    uintE sumV = pbbs::reduce(ds, pbbs::addm<uintE>());
+
+
+    v_data.size -= sumV;
+
+    par_for(0,size,1,[&](size_t i) {
+      if(v_data.A[vertices[i]].entries.alloc) {
+
+        uintE id = vertices[i];
+
+        v_data.A[id].neighbors.del();
+        v_data.A[id].degree = 0;
+        v_data.A[id].entries.del();
+      }
+    });
+
+    if(v_data.size < v_data.capacity >> 1) {
+      v_data.resize(v_data.capacity >> 1);
+    }
+
+    this -> n -= sumV;
+  }
+
+  void batchRemoveEdges() {
+    
+  }
+
+  void removeEdge(uintE u,uintE v) {
+    if(!existEdge(u,v)) return;
+    this -> m--;
+
+    uintE whereV = v_data.A[u].neighbors.find(v,UINT_E_MAX);
+    uintE whereU = v_data.A[v].neighbors.find(u,UINT_E_MAX);
+
+    v_data.A[u].entries.size--;
+    v_data.A[v].entries.size--;
+
+    v_data.A[u].entries.A[whereV] = v_data.A[u].entries.A[v_data.A[u].entries.size];
+    v_data.A[v].entries.A[whereU] = v_data.A[v].entries.A[v_data.A[v].entries.size];
+
+    v_data.A[u].neighbors.erase(v);
+    v_data.A[v].neighbors.erase(u);
+
+
+    if(whereV != v_data.A[u].entries.size) v_data.A[u].neighbors.erase(std::get<0>(v_data.A[u].entries.A[whereV]));
+    if(whereU != v_data.A[v].entries.size) v_data.A[v].neighbors.erase(std::get<0>(v_data.A[v].entries.A[whereU]));
+
+    if(whereV != v_data.A[u].entries.size) v_data.A[u].neighbors.insert(std::make_tuple(std::get<0>(v_data.A[u].entries.A[whereV]),whereV));
+    if(whereU != v_data.A[v].entries.size) v_data.A[v].neighbors.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[whereU]),whereU));
+  }
+
 
 
   template <class F>
@@ -352,114 +421,7 @@ struct dynamic_symmetric_graph {
     return edges;
   }
 
-
 };
-
-
-
-// // Mutates (sorts) the underlying array A containing a black-box description of
-// // an edge of typename A::value_type. The caller provides functions GetU, GetV, and GetW
-// // which extract the u, v, and weight of a (u,v,w) edge respective (if the edge
-// // is a std::tuple<uinte, uintE, W> this is just get<0>, ..<1>, ..<2>
-// // respectively.
-// // e.g.:
-// //   using edge = std::tuple<uintE, uintE, W>;
-// //   auto get_u = [&] (const edge& e) { return std::get<0>(e); };
-// //   auto get_v = [&] (const edge& e) { return std::get<1>(e); };
-// //   auto get_w = [&] (const edge& e) { return std::get<2>(e); };
-// //   auto G = sym_graph_from_edges<W>(coo1, get_u, get_v, get_w, 10, false);
-// template <class W, class EdgeSeq, class GetU, class GetV, class GetW>
-// inline dynamic_symmetric_graph<dynamic_symmetric_vertex, W> sym_graph_from_edges(
-//     EdgeSeq& A,
-//     size_t n,
-//     GetU&& get_u,
-//     GetV&& get_v,
-//     GetW&& get_w,
-//     bool is_sorted = false) {
-//   using vertex = dynamic_symmetric_vertex<W>;
-//   using edge_type = typename vertex::edge_type;
-//   size_t m = A.size();
-
-//   if (m == 0) {
-//     if (n == 0) {
-//       std::function<void()> del = []() {};
-//       return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(nullptr, 0, 0, del, nullptr);
-//     } else {
-//       auto v_data = pbbs::new_array_no_init<dynamic_vertex_data>(n);
-//       par_for(0, n, pbbslib::kSequentialForThreshold, [&] (size_t i) {
-//         v_data[i].offset = 0;
-//         v_data[i].degree = 0;
-//       });
-//       std::function<void()> del = get_deletion_fn(v_data, nullptr);
-//       return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(v_data, n, 0, del, nullptr);
-//     }
-//   }
-
-//   if (!is_sorted) {
-//     size_t bits = pbbslib::log2_up(n);
-//     pbbslib::integer_sort_inplace(A.slice(), get_u, bits);
-//   }
-
-//   auto starts = sequence<uintT>(n+1, (uintT) 0);
-
-//   using neighbor = std::tuple<uintE, W>;
-//   auto edges = sequence<neighbor>(m, [&](size_t i) {
-//     // Fuse loops over edges (check if this helps)
-//     if (i == 0 || (get_u(A[i]) != get_u(A[i - 1]))) {
-//       starts[get_u(A[i])] = i;
-//     }
-//     if (i != (m-1)) {
-//       uintE our_vtx = get_u(A[i]);
-//       uintE next_vtx = get_u(A[i+1]);
-//       if (our_vtx != next_vtx && (our_vtx + 1 != next_vtx)) {
-//         par_for(our_vtx+1, next_vtx, pbbslib::kSequentialForThreshold, [&] (size_t k) {
-//           starts[k] = i+1;
-//         });
-//       }
-//     }
-//     if (i == (m-1)) { /* last edge */
-//       starts[get_u(A[i]) + 1] = m;
-//     }
-//     return std::make_tuple(get_v(A[i]), get_w(A[i]));
-//   });
-
-// //  auto copy_f = [&] (const uintT& u, const uintT& v) -> uintT {
-// //    if (v == 0) { return u; }
-// //    return v;
-// //  };
-// //  auto copy_m = pbbs::make_monoid(copy_f, (uintT)0);
-// //  pbbs::scan_inplace(starts.slice(), copy_m, pbbs::fl_inplace);
-// //  par_for(0, n, pbbslib::kSequentialForThreshold, [&] (size_t i) {
-// //    uintT o = starts[i];
-// //    size_t degree = ((i == n - 1) ? m : starts[i + 1]) - o;
-// //    v[i].degree = degree;
-// //    v[i].neighbors = ((std::tuple<uintE, W>*)(edges.begin() + o));
-// //    /* sort each neighbor list if needed */
-// //  });
-// //  return graph<V>(v, n, m, get_deletion_fn(v, edges.to_array()));
-
-//   auto v_data = pbbs::new_array_no_init<dynamic_vertex_data>(n);
-//   par_for(0, n, pbbslib::kSequentialForThreshold, [&] (size_t i) {
-//     uintT o = starts[i];
-//     v_data[i].offset = o;
-//     v_data[i].degree = (uintE)(((i == (n-1)) ? m : starts[i+1]) - o);
-//   });
-//   auto new_edge_arr = edges.to_array();
-//   return dynamic_symmetric_graph<dynamic_symmetric_vertex, W>(v_data, n, m, get_deletion_fn(v_data, new_edge_arr), (edge_type*)new_edge_arr);
-// }
-
-// template <class W>
-// inline dynamic_symmetric_graph<dynamic_symmetric_vertex, W> sym_graph_from_edges(
-//     pbbs::sequence<std::tuple<uintE, uintE, W>>& A,
-//     size_t n,
-//     bool is_sorted = false) {
-//   using edge = std::tuple<uintE, uintE, W>;
-//   auto get_u = [&] (const edge& e) { return std::get<0>(e); };
-//   auto get_v = [&] (const edge& e) { return std::get<1>(e); };
-//   auto get_w = [&] (const edge& e) { return std::get<2>(e); };
-//   return sym_graph_from_edges<W>(A, n, get_u, get_v, get_w, is_sorted);
-// }
-
 
 
 template <template <class W> class vertex_type, class W>
