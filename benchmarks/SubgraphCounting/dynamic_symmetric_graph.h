@@ -241,11 +241,14 @@ struct dynamic_symmetric_graph {
 
   // TODO: What is this meant to do? Why the -10?
   void _checkSize(uintE v,uintE many) {
-    if((int)v_data.A[v].entries.size > (0 + (int)v_data.A[v].entries.capacity - 10 - (int)many)) {
-      v_data.A[v].entries.resize(1 << (size_t)ceil(log2(v_data.A[v].entries.size + 10 + many)) - v_data.A[v].entries.size);
+    if(v_data.A[v].entries.size + many > v_data.A[v].entries.capacity) {
+      v_data.A[v].entries.resize(many);
+      if(v == 1) {
+        cout << v_data.A[v].entries.capacity << endl;
+      }
     }
-    if((int)v_data.A[v].degree > (int)v_data.A[v].neighbors.m - (int)10 - (int)many) {
-      sparse_table<uintE,uintE,hash_uintE> tmp = make_sparse_table<uintE,uintE,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m + many + 10)),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    if(v_data.A[v].entries.size + many > v_data.A[v].neighbors.m) {
+      sparse_table<uintE,uintE,hash_uintE> tmp = make_sparse_table<uintE,uintE,hash_uintE>(v_data.A[v].entries.size + many,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
       par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
         tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),i));
       });
@@ -256,47 +259,32 @@ struct dynamic_symmetric_graph {
 
   // CheckSize For deletion
   void __checkSize(uintE v,uintE many) {
-    if((int)(v_data.A[v].entries.size) - many < ((int)v_data.A[v].entries.capacity) >> 1) {
-      v_data.A[v].entries.resize(1 << (size_t)ceil(log2(v_data.A[v].entries.size - many)) - v_data.A[v].entries.size);
-    }
-
-    if((int)(v_data.A[v].degree) - many < (int)(v_data.A[v].neighbors.m) >> 1 ) {
-      sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(1 << (int)ceil(log2(v_data.A[v].neighbors.m - many)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
-      par_for(0,v_data.A[v].entries.size,1,[&](size_t i) {
-        tmp.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[i]),i));
-      });
-      v_data.A[v].neighbors = tmp;
-    }
+    // TODO: Need to write an effective shrinking function to conserve memory
   }
 
   void batchAddEdges(uintE u,sequence<uintE> edges) {
-
-
-    pbbs::sequence<uintE> ds = pbbs::sequence<uintE>(edges.size(),[&](size_t i){return !existEdge(u,edges[i]);});
-    uintE sumW = pbbs::reduce(ds, pbbs::addm<uintE>());
+    pbbs::sequence<uintE> ds = pbbs::filter(edges,[&](uintE i){return !existEdge(u,i);});
+    uintE sumW = ds.size();
 
     this -> m += sumW;
-    _checkSize(u,edges.size());
+    _checkSize(u,sumW);
 
 
     size_t ori = v_data.A[u].entries.size;
-    v_data.A[u].entries.size += edges.size();
+    v_data.A[u].entries.size += ds.size();
 
-    v_data.A[u].degree += edges.size();
-    par_for(0,edges.size(),1,[&](size_t i) {
-      if(!existEdge(u,edges[i])) {
-        uintE v = edges[i];
-        _checkSize(v,1);
+    v_data.A[u].degree += ds.size();
+    par_for(0,ds.size(),1,[&](size_t i) {
+      uintE v = ds[i];
+      _checkSize(v,1);
 
         //cout << "No segmentation fault yet " << i << endl;
-        v_data.A[v].neighbors.insert(std::make_tuple(u,v_data.A[v].entries.size));
-        v_data.A[v].entries.push_back(std::make_tuple(u,0));
-        v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
-        v_data.A[u].neighbors.insert(std::make_tuple(v,ori + i));
+      v_data.A[v].neighbors.insert(std::make_tuple(u,v_data.A[v].entries.size));
+      v_data.A[v].entries.push_back(std::make_tuple(u,0));
+      v_data.A[u].entries.A[ori + i] = std::make_tuple(v,0);
+      v_data.A[u].neighbors.insert(std::make_tuple(v,ori + i));
 
-        v_data.A[v].degree++;
-      }
-
+      v_data.A[v].degree++;
     });
   }
 
@@ -356,19 +344,68 @@ struct dynamic_symmetric_graph {
     this -> n -= sumV;
   }
 
-  void batchRemoveEdges() {
-    
+  void batchRemoveEdges(uintE u,sequence<uintE> edges) {
+    pbbs::sequence<uintE> ds = pbbs::filter(edges,[&](uintE i){return existEdge(u,i);});
+    uintE sumW = ds.size();
+
+    this -> m -= sumW;
+
+    size_t ori = v_data.A[u].entries.size;
+    v_data.A[u].entries.size -= ds.size();
+    v_data.A[u].degree -= ds.size();
+    sparse_table<uintE,bool,hash_uintE> checkIfThere = make_sparse_table<uintE,bool,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+
+    par_for(0,ds.size(),1,[&](size_t i) {
+      uintE v = ds[i];
+      checkIfThere.insert(std::make_tuple(v,true));
+
+      // Remove u from v
+      uintE whereU = v_data.A[v].neighbors.find(u,UINT_E_MAX);
+      v_data.A[v].entries.size--;
+      v_data.A[v].degree--;
+      v_data.A[v].entries.A[whereU] = v_data.A[v].entries.A[v_data.A[v].entries.size];
+      v_data.A[v].neighbors.erase(u);
+
+      if(whereU != v_data.A[v].entries.size) v_data.A[v].neighbors.erase(std::get<0>(v_data.A[v].entries.A[whereU]));
+
+      if(whereU != v_data.A[v].entries.size) v_data.A[v].neighbors.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[whereU]),whereU));
+
+      __checkSize(v,1);
+
+    });
+
+    // A separate loop to avoid collisions and segmentation fault
+    pbbs::sequence<uintE> notInLast = pbbs::filter(ds,[&](uintE i) {
+      return (v_data.A[u].neighbors.find(i,UINT_E_MAX) < (ori - sumW));
+    });
+    pbbs::sequence<uintE> allLast = pbbs::sequence<uintE>(sumW,[&](size_t i){return (ori - i - 1);});
+    pbbs::sequence<uintE> notInDS = pbbs::filter(allLast,[&](uintE i){return !checkIfThere.find(std::get<0>(v_data.A[u].entries.A[i]),false);});
+
+    for(int i = 0;i < notInLast.size();i++) {
+      // swap notInLast[i] and notInDS[i]
+      uintE whereU = v_data.A[u].neighbors.find(notInLast[i],UINT_E_MAX);
+      uintE whereV = notInDS[i];
+      v_data.A[u].entries.A[whereU] = v_data.A[u].entries.A[whereV];
+      v_data.A[u].neighbors.change(notInLast[i],UINT_E_MAX);
+      v_data.A[u].neighbors.change(std::get<0>(v_data.A[u].entries.A[whereV]),whereU);
+    }
+    __checkSize(u,sumW);
   }
 
   void removeEdge(uintE u,uintE v) {
     if(!existEdge(u,v)) return;
     this -> m--;
+    __checkSize(u,1);
+    __checkSize(v,1);
 
     uintE whereV = v_data.A[u].neighbors.find(v,UINT_E_MAX);
     uintE whereU = v_data.A[v].neighbors.find(u,UINT_E_MAX);
 
     v_data.A[u].entries.size--;
     v_data.A[v].entries.size--;
+
+    v_data.A[u].degree--;
+    v_data.A[v].degree--;
 
     v_data.A[u].entries.A[whereV] = v_data.A[u].entries.A[v_data.A[u].entries.size];
     v_data.A[v].entries.A[whereU] = v_data.A[v].entries.A[v_data.A[v].entries.size];
@@ -383,7 +420,6 @@ struct dynamic_symmetric_graph {
     if(whereV != v_data.A[u].entries.size) v_data.A[u].neighbors.insert(std::make_tuple(std::get<0>(v_data.A[u].entries.A[whereV]),whereV));
     if(whereU != v_data.A[v].entries.size) v_data.A[v].neighbors.insert(std::make_tuple(std::get<0>(v_data.A[v].entries.A[whereU]),whereU));
   }
-
 
 
   template <class F>
