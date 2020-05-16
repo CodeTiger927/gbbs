@@ -243,9 +243,6 @@ struct dynamic_symmetric_graph {
   void _checkSize(uintE v,uintE many) {
     if(v_data.A[v].entries.size + many > v_data.A[v].entries.capacity) {
       v_data.A[v].entries.resize(many);
-      if(v == 1) {
-        cout << v_data.A[v].entries.capacity << endl;
-      }
     }
     if(v_data.A[v].entries.size + many > v_data.A[v].neighbors.m) {
       sparse_table<uintE,uintE,hash_uintE> tmp = make_sparse_table<uintE,uintE,hash_uintE>(v_data.A[v].entries.size + many,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
@@ -353,7 +350,7 @@ struct dynamic_symmetric_graph {
     size_t ori = v_data.A[u].entries.size;
     v_data.A[u].entries.size -= ds.size();
     v_data.A[u].degree -= ds.size();
-    sparse_table<uintE,bool,hash_uintE> checkIfThere = make_sparse_table<uintE,bool,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    sparse_table<uintE,bool,hash_uintE> checkIfThere = make_sparse_table<uintE,bool,hash_uintE>(1.5 * ds.size(),std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
     par_for(0,ds.size(),1,[&](size_t i) {
       uintE v = ds[i];
@@ -374,23 +371,37 @@ struct dynamic_symmetric_graph {
 
     });
 
+
     // A separate loop to avoid collisions and segmentation fault
     pbbs::sequence<uintE> notInLast = pbbs::filter(ds,[&](uintE i) {
       return (v_data.A[u].neighbors.find(i,UINT_E_MAX) < (ori - sumW));
     });
-    pbbs::sequence<uintE> allLast = pbbs::sequence<uintE>(sumW,[&](size_t i){return (ori - i - 1);});
-    pbbs::sequence<uintE> notInDS = pbbs::filter(allLast,[&](uintE i){return !checkIfThere.find(std::get<0>(v_data.A[u].entries.A[i]),false);});
+    pbbs::sequence<uintE> InLast = pbbs::filter(ds,[&](uintE i) {
+      return (v_data.A[u].neighbors.find(i,UINT_E_MAX) >= (ori - sumW));
+    });
 
-    for(int i = 0;i < notInLast.size();i++) {
+    pbbs::sequence<uintE> allLast = pbbs::sequence<uintE>(sumW,[&](size_t i){return (ori - i - 1);});    
+    pbbs::sequence<uintE> notInDS = pbbs::filter(allLast,[&](uintE i){
+      return !checkIfThere.find(std::get<0>(v_data.A[u].entries.A[i]),false);
+    });
+
+
+    par_for(0,notInLast.size(),1,[&](size_t i) {
       // swap notInLast[i] and notInDS[i]
       uintE whereU = v_data.A[u].neighbors.find(notInLast[i],UINT_E_MAX);
       uintE whereV = notInDS[i];
       v_data.A[u].entries.A[whereU] = v_data.A[u].entries.A[whereV];
       v_data.A[u].neighbors.change(notInLast[i],UINT_E_MAX);
       v_data.A[u].neighbors.change(std::get<0>(v_data.A[u].entries.A[whereV]),whereU);
-    }
+    });
+    
+    par_for(0,InLast.size(),1,[&](size_t i) {
+      v_data.A[u].neighbors.change(InLast[i],UINT_E_MAX);
+    });
+
     __checkSize(u,sumW);
   }
+
 
   void removeEdge(uintE u,uintE v) {
     if(!existEdge(u,v)) return;
