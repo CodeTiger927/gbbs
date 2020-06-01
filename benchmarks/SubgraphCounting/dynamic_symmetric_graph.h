@@ -9,6 +9,8 @@
 
 #include "pbbslib/sequence_ops.h"
 
+#include "pbbslib/merge_sort.h"
+
 #include "pbbslib/monoid.h"
 
 #include "ligra/pbbslib/sparse_table.h"
@@ -16,11 +18,13 @@
 #include "ligra/pbbslib/dyn_arr.h"
 
 // Initial size for sparse_table
-uintE INIT_VALUE_FOR_SIZE = 10;
+size_t INIT_VALUE_FOR_SIZE = 4;
 
 std::function<void()> get_deletion_fn(void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*, void*);
+
+
 
 struct hash_uintE {
   inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
@@ -44,7 +48,7 @@ struct dynamic_symmetric_vertex {
     neighbors = vdata.neighbors;
     degree = vdata.degree;
   }
-
+  // Return all the neighbors of that vertex
   sequence<uintE> allNeighbor() {
     auto entries = this.neighbors.entries();
     sequence<uintE> res = sequence<uintE>(entries.size(),[&](size_t i) {
@@ -54,9 +58,9 @@ struct dynamic_symmetric_vertex {
     return res;
   }
 
+  // Clear
   void clear() { neighbors.del(); }
 };
-
 
 template <template <class W> class vertex_type, class W>
 struct dynamic_symmetric_graph {
@@ -106,6 +110,7 @@ struct dynamic_symmetric_graph {
     return vertex(v_data.A[i]);
   }
 
+  // Resizes v_data according to s
   void resizeVDATA(size_t s) {
     size_t nC = 1 << ((size_t)(ceil(log2(s))));
     dynamic_vertex_data* nA = pbbslib::new_array_no_init<dynamic_vertex_data>(nC);
@@ -116,7 +121,9 @@ struct dynamic_symmetric_graph {
     v_data.alloc = true;
   }
 
+  // A function to check whether or not it is worth resizing
   void adjustVDATA(size_t amount) {
+    amount = std::max(amount,INIT_VALUE_FOR_SIZE);
     size_t cur = v_data.capacity;
     if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
       return;
@@ -124,6 +131,7 @@ struct dynamic_symmetric_graph {
     resizeVDATA(amount);
   }
 
+  // Resizes v_data.A[u].neighbors according to amount
   void resizeNEIGHBORS(uintE u,size_t amount) {
     sparse_table<uintE,bool,hash_uintE> res = make_sparse_table<uintE,bool,hash_uintE>(amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     auto entries = v_data.A[u].neighbors.entries();
@@ -134,7 +142,9 @@ struct dynamic_symmetric_graph {
     v_data.A[u].neighbors = res;
   }
 
+  // A function that determines whether it is worth it to resize neighbors
   void adjustNEIGHBORS(uintE u,size_t amount) {
+    amount = std::max(amount,INIT_VALUE_FOR_SIZE);
     size_t cur = v_data.A[u].neighbors.m;
     if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
       return;
@@ -142,6 +152,7 @@ struct dynamic_symmetric_graph {
     resizeNEIGHBORS(u,amount);
   }
 
+  // Add and initialize vertices in parallel
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
 
@@ -163,11 +174,11 @@ struct dynamic_symmetric_graph {
     this -> n += sumV;
   }
 
+  // Add a single vertex, cannot be used in parallel
   void addVertex(uintE id) {
     if(existVertices.find(id,false)) return;
 
-    // TODO: Same issue with resizing as above.
-    if(id >= v_data.size) v_data.resize((1 << (size_t)ceil(log2(id)) + 1) - v_data.size);
+    adjustVDATA(v_data.size + 1);
 
     sparse_table<uintE,bool,hash_uintE> tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     
@@ -178,10 +189,12 @@ struct dynamic_symmetric_graph {
     v_data.size++;
   }
 
+  // Check if an edge exists
   bool existEdge(uintE v,uintE u) {
     return v_data.A[v].neighbors.find(u,false);
   }
 
+  // Add a series of edges in parallel
   void batchAddEdges(uintE u,sequence<uintE> edges) {
     pbbs::sequence<uintE> ds = pbbs::filter(edges,[&](uintE i){return !existEdge(u,i);});
     uintE sumW = ds.size();
@@ -199,9 +212,62 @@ struct dynamic_symmetric_graph {
 
       v_data.A[v].degree++;
     });
+  }
+
+
+  // Add edges in the forms of pairs in parallel
+  void batchAddEdges(sequence<std::pair<uintE,uintE>> edges) {
+    sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
+    uintE sumW = ds.size();
+
+    this -> m += sumW;
+    auto allNeighbors = make_sparse_table<uintE,bool,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    par_for(0,ds.size(),1,[&](size_t i) {
+      std::pair<uintE,uintE> cur = ds[i];
+      allNeighbors.insert(std::make_tuple(cur.first,true));
+      allNeighbors.insert(std::make_tuple(cur.second,true));
+    });
+
+    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * ds.size(),[&](size_t i) {
+      if(i % 2) {
+        return std::make_pair(ds[i / 2].first,ds[i / 2].second);
+      }else{
+        return std::make_pair(ds[i / 2].second,ds[i / 2].first);
+      }
+    });
+
+    // Sorting to recalculate the degree
+
+    // Using merge sort for stability, as it guarentees NlogN work regardless of data specifics.
+    sequence<std::pair<uintE,uintE>> all = merge_sort(allS,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a < b;});
+    auto start = make_sparse_table<uintE,uintE,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    auto end = make_sparse_table<uintE,uintE,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+
+    par_for(0,all.size(),[&](size_t i) {
+      std::pair<uintE,uintE> cur = all[i];
+      if(i != 0) {
+        if(cur.first != all[i - 1].first) {
+          start.insert(std::make_tuple(cur.first,i));
+          end.insert(std::make_tuple(all[i - 1].first,i - 1));
+        }
+      }
+    });
+    start.insert(std::make_tuple(all[0].first,0));
+    end.insert(std::make_tuple(all[2 * ds.size() - 1].first,2 * ds.size() - 1));
+    auto entries = allNeighbors.entries();
+    par_for(0,entries.size(),[&](size_t i) {
+      uintE cur = std::get<0>(entries[i]);
+      v_data.A[cur].degree += end.find(cur,0) - start.find(cur,0) + 1;
+      adjustNEIGHBORS(cur,v_data.A[cur].degree);
+    });
+    par_for(0,all.size(),[&](size_t i) {
+      std::pair<uintE,uintE> cur = all[i];
+      v_data.A[cur.first].neighbors.insert(std::make_tuple(cur.second,true));
+    });
 
   }
 
+  // Add a single edge, cannot be used in parallel
   void addEdge(uintE v,uintE u) {
     if(existEdge(u,v)) return;
     this -> m++;
@@ -211,16 +277,19 @@ struct dynamic_symmetric_graph {
     v_data.A[u].neighbors.insert(std::make_tuple(v,true));
   }
 
+  // Remove a single vertex, cannot be used in parallel
   void removeVertex(uintE id) {
     if(existVertices.find(id,false)) return;
 
-    if(v_data.size - 1 < v_data.capacity >> 1) {
-      v_data.resize((v_data.capacity >> 1) - v_data.size);
-    }
+    adjustVDATA(v_data.size - 1);
+
+    existVertices.change(id,false);
+
     v_data.A[id].neighbors.del();
     v_data.A[id].degree = 0;
   }
 
+  // Remove multiple vertices in parallel
   void batchRemoveVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
 
@@ -230,13 +299,13 @@ struct dynamic_symmetric_graph {
 
       uintE id = existingVertices[i];
 
+      existVertices.change(id,false);
+
       v_data.A[id].neighbors.del();
       v_data.A[id].degree = 0;
     });
 
-    if(v_data.size < v_data.capacity >> 1) {
-      v_data.resize(v_data.capacity >> 1);
-    }
+    adjustVDATA(v_data.size - sumV);
 
     this -> n -= sumV;
   }
@@ -259,12 +328,60 @@ struct dynamic_symmetric_graph {
 
       adjustNEIGHBORS(v,v_data.A[v].degree);
     });
-
     adjustNEIGHBORS(u,v_data.A[u].degree);
+  }
+
+    // Remove edges in the forms of pairs in parallel
+  void batchRemoveEdges(sequence<std::pair<uintE,uintE>> edges) {
+    sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return existEdge(i.first,i.second);});
+    uintE sumW = ds.size();
+
+    this -> m -= sumW;
+    auto allNeighbors = make_sparse_table<uintE,bool,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    par_for(0,ds.size(),1,[&](size_t i) {
+      std::pair<uintE,uintE> cur = ds[i];
+      allNeighbors.insert(std::make_tuple(cur.first,true));
+      allNeighbors.insert(std::make_tuple(cur.second,true));
+    });
+
+    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * ds.size(),[&](size_t i) {
+      if(i % 2) {
+        return std::make_pair(ds[i / 2].first,ds[i / 2].second);
+      }else{
+        return std::make_pair(ds[i / 2].second,ds[i / 2].first);
+      }
+    });
+
+    // Sorting to recalculate the degree
+
+    // Using merge sort for stability, as it guarentees NlogN work regardless of data specifics.
+    sequence<std::pair<uintE,uintE>> all = merge_sort(allS,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a < b;});
+    auto start = make_sparse_table<uintE,uintE,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    auto end = make_sparse_table<uintE,uintE,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+
+    par_for(0,all.size(),[&](size_t i) {
+      std::pair<uintE,uintE> cur = all[i];
+      v_data.A[cur.first].neighbors.erase(cur.second);
+      if(i != 0) {
+        if(cur.first != all[i - 1].first) {
+          start.insert(std::make_tuple(cur.first,i));
+          end.insert(std::make_tuple(all[i - 1].first,i - 1));
+        }
+      }
+    });
+
+    start.insert(std::make_tuple(all[0].first,0));
+    end.insert(std::make_tuple(all[2 * ds.size() - 1].first,2 * ds.size() - 1));
+    auto entries = allNeighbors.entries();
+    cout << endl;
+    par_for(0,entries.size(),[&](size_t i) {
+      uintE cur = std::get<0>(entries[i]);
+      v_data.A[cur].degree -= end.find(cur,0) - start.find(cur,0) + 1;
+      adjustNEIGHBORS(cur,v_data.A[cur].degree);
+    });
 
 
   }
-
 
   void removeEdge(uintE u,uintE v) {
     if(!existEdge(u,v)) return;
@@ -277,6 +394,7 @@ struct dynamic_symmetric_graph {
   }
 };
 
+// Creates an empty dynamic symmetric graph
 template <template <class W> class vertex_type, class W>
 dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricGraph() {
 
@@ -287,7 +405,7 @@ dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricG
   return dynamic_symmetric_graph<dynamic_symmetric_vertex,W>(_vData,0,0,doNothing,tmp);
 }
 
-
+// Creates a dynamic symmetric graph based on another graph
 template <template <class W> class vertex_type, class W>
 dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(symmetric_graph<symmetric_vertex,pbbs::empty> G) {
 
