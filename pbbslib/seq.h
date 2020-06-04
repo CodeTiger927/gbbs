@@ -211,25 +211,18 @@ namespace pbbs {
       }
     }
 
-
-    //New Function
-    //Resizes array and fills with elements
-    void resize(size_t size, T fill) {
-      auto ns = pbbs::new_array_no_init<T>(size, true);
-      parallel_for(0, size, [&] (size_t i) {
-        ns[i] = i < n ? s[i] : fill;  
-      });
-      s = ns;
-      n = size;
-    }
-
+    //NEW Function
     void append(const sequence a) {
       auto ns = pbbs::new_array_no_init<T>(n + a.size());
       parallel_for(0, n + a.size(), [&] (size_t i) {
         ns[i] = i < n ? s[i] : a[i - n];
       });
+
+      free(s);      
+
       s = ns;
       n = n + a.size();
+      
       
     }
 

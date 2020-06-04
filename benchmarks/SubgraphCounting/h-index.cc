@@ -2,19 +2,40 @@
 #include <iostream>
 
 int main() {
-  
-  auto G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
-  HSet h = HSet(100, G);
-  sequence<uintE> batch = sequence<uintE>(6);
+
+  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
+  HSet h = HSet(G);
+  h.threshold = 100;
+
+  auto batch = pbbs::sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
     batch[i] = i;
   });
-  h.insert(batch);
 
-  cout << "H-INDEX: " << h.hindex << endl;
-  
+  h.erase(batch);
+
 }
 
+/* Test rslice, interval from a to b in reverse (where a > b) = rslice(size - a, size - b)
+int main() {
+  auto s = pbbs::sequence<uintE>(5);
+
+  for (int i = 0; i < 5; i++) {
+    s[i] = i;
+  }
+  size_t a = 2;
+  size_t b = 5;
+  pbbs::sequence<uintE> x = s.rslice(a,b);
+
+  cout << "A: " << a << endl;
+  cout << "B: " << b << endl;
+
+  for (int i = 0; i < x.size(); i++) {
+    cout << x[i] << endl;
+  }
+
+}
+*/
 /*
 int main() {
 
@@ -74,29 +95,23 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   // Then, assume we have some array that denotes batch edge insertions/deletions
   // In a serial for loop, process these batch updates, dynamically, including graph updates + h-index updates
 
-  //Temporary Test for H-index
-  //EXAMPLE: ./h-index -s "graph_test.txt"
-  //Why does it run 3 times?
-  // TODO: You have to pass -rounds 1 to make it run only 1 time (or however many times you would like).
-  // The reason why it runs 3 times is because sometimes, the cache is cold on the first run;
-  // the second run warms up the cache, and may give faster times. Usually we report the 
-  // minimum of all 3 runs for timing tests.
-  // TODO: Why is G being read in this way? GA is the passed in graph.
-  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
-  // TODO: Threshold should be determined based on G, not written as a constant
-  HSet h = HSet(100, G);
-  
-  cout << h.insert(0) << endl;
-  cout << h.insert(1) << endl;
-  cout << h.insert(2) << endl;
-  cout << h.insert(3) << endl;
-  cout << h.insert(4) << endl;
-  cout << h.insert(5) << endl;
-  cout << h.erase(0) << endl;
-  cout << h.erase(1) << endl;
-  cout << h.erase(2) << endl << endl << endl;
+  //EXAMPLE: ./h-index -s -rounds 1 "graph_test.txt"
 
-  cout << "Execution Complete" << endl;
+  //-rounds 1 to run once
+
+  //For some reason GA has type symmetric_graph<csv_bytepd_amortized, pbbs::empty> which doesn't match my symmetric_graph<symmetric_vertex, pbbs::empty>&
+  //I don't know how to fix that so for testing I just commented out 73 and uncommented out line 69-70
+  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
+  HSet h = HSet(G);
+  h.threshold = 1; //For debugging, to make sure that whatever threshold is, it still works
+
+  //HSet h = HSet(GA); 
+  auto batch = pbbs::sequence<uintE>(6);
+  par_for(0, 6, [&] (size_t i) {
+    batch[i] = i;
+  });
+  h.insert(batch);
+  cout << "HINDEX: " << h.hindex << endl;
 
   return 0;
 }

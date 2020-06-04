@@ -122,6 +122,8 @@ class sparse_table {
       }
       h = incrementIndex(h);
     }
+
+    return m;
   }
 
   bool insert(std::tuple<K, V> kv) {
@@ -246,9 +248,19 @@ class sparse_table {
   }
 
   //NEW
-  void change(K k, V val) {
-    size_t index = idx(k);
-    table[index] = std::make_tuple(k, val);
+  bool change(K k, V val) {
+    size_t h = firstIndex(k);
+    while (true) {
+      if (std::get<0>(table[h]) == k) {
+        if (pbbslib::CAS(&std::get<1>(table[h]), std::get<1>(table[h]), val)) {
+          return true;
+        }
+        return false;
+      }
+
+      h = incrementIndex(h);
+    }
+    return false;
   }
 
   void erase(K k) { // Assumes that k is in sparse_table
@@ -256,6 +268,7 @@ class sparse_table {
     size_t index = idx(k);
     table[index] = empty;
   }
+
 
   sequence<T> entries() {
     auto pred = [&](T& t) { return std::get<0>(t) != empty_key; };
