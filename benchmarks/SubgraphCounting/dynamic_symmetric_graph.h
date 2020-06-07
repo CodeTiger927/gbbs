@@ -200,6 +200,8 @@ struct dynamic_symmetric_graph {
   }
 
   // Add and initialize vertices in parallel
+  // TODO: You're assuming that all indices in vertices are unique. Maybe this
+  // is an okay assumption, but clarify that in comments.
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
 
@@ -207,8 +209,11 @@ struct dynamic_symmetric_graph {
     pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
     uintE ma = pbbs::reduce(vertices,monoidm);
 
+    // TODO: Why call adjustVDATA if ma < v_data.capacity? That's a waste of a
+    // function call; instead, just do an if statement.
     adjustVDATA(std::max((size_t)ma,v_data.capacity));
 
+    // DOn't the existing vertices left have to be added to existVertices?
     pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){return !existVertices.find(i,false);});
     size_t sumV = existingVertices.size();
 
@@ -222,6 +227,8 @@ struct dynamic_symmetric_graph {
     this -> n += sumV;
   }
 
+
+  // TODO: Remove this method
   // Add a single vertex, cannot be used in parallel
   void addVertex(uintE id) {
     if(existVertices.find(id,false)) return;
@@ -250,9 +257,13 @@ struct dynamic_symmetric_graph {
     this -> m += sumW;
     adjustNEIGHBORS(u,v_data.A[u].degree + sumW);
 
+    // TODO: You're assuming that all the indices in edges are unique.
+    // Maybe this is an okay assumption, but you should clarify that in
+    // comments.
     v_data.A[u].degree += ds.size();
     par_for(0,ds.size(),1,[&](size_t i) {
       uintE v = ds[i];
+      // Why is this v_data.A[u]? Shouldn't it be v_data.A[v]?
       adjustNEIGHBORS(v,v_data.A[u].degree + 1);
 
       v_data.A[v].neighbors.insert(std::make_tuple(u,true));
@@ -264,6 +275,12 @@ struct dynamic_symmetric_graph {
 
 
   // Add edges in the forms of pairs in parallel
+  // TODO: This may be slow for small batches of edges added. Youre using a 
+  // lot of sparse tables. Even just doing two sorts might be faster to collate
+  // where edges with the same endpoints start and stop. Or something like,
+  // duplicate edges but with vertices flipped in the pair and sort on both.
+  // Or, you could do for small batches a CAS to update the correct
+  // degrees and edge counts.
   void batchAddEdges(sequence<std::pair<uintE,uintE>> edges) {
     sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
     uintE sumW = ds.size();
@@ -315,6 +332,7 @@ struct dynamic_symmetric_graph {
 
   }
 
+  // TODO: Remove this method
   // Add a single edge, cannot be used in parallel
   void addEdge(uintE v,uintE u) {
     if(existEdge(u,v)) return;
@@ -325,6 +343,7 @@ struct dynamic_symmetric_graph {
     v_data.A[u].neighbors.insert(std::make_tuple(v,true));
   }
 
+  // TODO: Remove this method
   // Remove a single vertex, cannot be used in parallel
   void removeVertex(uintE id) {
     if(existVertices.find(id,false)) return;
