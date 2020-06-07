@@ -17,6 +17,8 @@
 
 #include "ligra/pbbslib/dyn_arr.h"
 
+// TODO: Rename this to something that indicates it's for the sparse table
+// edge lists -- INIT_DYN_GRAPH_EDGE_SIZE or something like that
 // Initial size for sparse_table
 size_t INIT_VALUE_FOR_SIZE = 4;
 
@@ -42,14 +44,28 @@ struct dynamic_symmetric_vertex {
   using edges_type = sparse_table<uintE,bool,hash_uintE>;
 
   uintE degree;
-  edges_type neighbors = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+  edges_type neighbors = make_sparse_table<uintE,bool,hash_uintE>(INIT_VALUE_FOR_SIZE, std::make_tuple(UINT_E_MAX, false), hash_uintE());
 
   dynamic_symmetric_vertex(dynamic_vertex_data& vdata) {
+    // TODO: You have to be careful about just resetting neighbors here. Note that 
+    // you've allocated space for neighbors above. A better solution is to
+    // keep neighbors as a pointer, set it to nullptr to begin with, 
+    // and then when you construct and obtain neighbors here, dynamic_symmetric_vertex
+    // takes ownership. You may also want a flag to say whether dynamic_symmetric_vertex
+    // takes ownership or not, so in the deletor you know whether you should
+    // clean up the sparse table or whoever constructed it should.
+    // Also, if this is the only place where INIT_VALUE_FOR_SIZE is used,
+    // then I think you don't need it.
     neighbors = vdata.neighbors;
     degree = vdata.degree;
   }
+
+  // TODO: Rename to getAllNeighbors
   // Return all the neighbors of that vertex
   sequence<uintE> allNeighbor() {
+    // TODO: Does it make more sense to have the sparse table be
+    // pbbs::empty instead of bool? And then I think we can return
+    // neighbors.entries directly here.
     auto entries = this.neighbors.entries();
     sequence<uintE> res = sequence<uintE>(entries.size(),[&](size_t i) {
       std::tuple<uintE,bool> cur = entries[i];
@@ -59,6 +75,7 @@ struct dynamic_symmetric_vertex {
   }
 
   // Clear
+  // See the issues about allocation in the constructor.
   void clear() { neighbors.del(); }
 };
 
@@ -75,6 +92,9 @@ struct dynamic_symmetric_graph {
   /* number of edges in G */
   size_t m;
 
+  // TODO: Maybe it's better to assume that vertices are in the range 0 to
+  // x, and just have a boolean dynamic array from 0 to x that marks
+  // if a vertex is there or not.
   // Sparse table that keeps track if a vertex exists
   sparse_table<uintE,bool,hash_uintE> existVertices;
 
@@ -87,6 +107,10 @@ struct dynamic_symmetric_graph {
         m(m),
         existVertices(_existVertices),
         deletion_fn(_deletion_fn) {
+          // TODO: You don't need to keep using this when there's no confusion
+          // over what variable is being called (e.g., no shadowing)
+          // Also, why do you have to transfer v_data like this? Can't you
+          // use a copy constructor?
           this -> v_data = pbbslib::dyn_arr<dynamic_vertex_data>(_v_data.size);
           par_for(0,_v_data.size,1,[&](size_t i) {
             this -> v_data.A[i] = _v_data.A[i];
@@ -94,6 +118,10 @@ struct dynamic_symmetric_graph {
   }
 
   // Find union of edges between two vertices
+  // TODO: What is this doing? And why? Are you trying to intersect
+  // u's neighbors with v's neighbors? There are more efficient ways of 
+  // doing this than what you're doing here -- this is something we've already
+  // worked out for applications like triangle counting.
   sequence<uintE> unionEdge(uintE u,uintE v) {
     if(v_data.A[u].degree > v_data.A[v].degree) return unionEdge(v,u);
     auto fil = [&](uintE& t) {return existEdge(v,t);};
@@ -110,17 +138,26 @@ struct dynamic_symmetric_graph {
     return vertex(v_data.A[i]);
   }
 
+  // TODO: Don't put VDATA in all caps.
   // Resizes v_data according to s
   void resizeVDATA(size_t s) {
+    // TODO: First check that v_data needs to be resized, or that 
+    // s is a valid resizing -- e.g., s > v_data size.
     size_t nC = 1 << ((size_t)(ceil(log2(s))));
     dynamic_vertex_data* nA = pbbslib::new_array_no_init<dynamic_vertex_data>(nC);
+    // TODO: Why 2000 as the granularity? There's a macro for the granularity -- use that.
     par_for(0,s,2000,[&](size_t i){nA[i] = v_data.A[i];});
+    // TODO: This is sort of just bad style, to manually alter an object like this.
+    // Maybe you should just free your v_data, and replace it with a new
+    // dynamic array.
     pbbslib::free_array(v_data.A);
     v_data.A = nA;
     v_data.capacity = nC;
     v_data.alloc = true;
   }
 
+  // TODO: I don't see why this should be separate from resizeVDATA? Combine
+  // the two functions.
   // A function to check whether or not it is worth resizing
   void adjustVDATA(size_t amount) {
     amount = std::max(amount,INIT_VALUE_FOR_SIZE);
@@ -131,21 +168,31 @@ struct dynamic_symmetric_graph {
     resizeVDATA(amount);
   }
 
+  // TODO: Don't use all caps NEIGHBORS.
   // Resizes v_data.A[u].neighbors according to amount
   void resizeNEIGHBORS(uintE u,size_t amount) {
+    // TODO: First check that amount is worth resizing to.
     sparse_table<uintE,bool,hash_uintE> res = make_sparse_table<uintE,bool,hash_uintE>(amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
     auto entries = v_data.A[u].neighbors.entries();
+    // TODO: Stylistic note: put spaces after your commas.
     par_for(0,entries.size(),1,[&](size_t i) {
       uintE cur = std::get<0>(entries[i]);
       res.insert(std::make_tuple(cur,true));
     });
+    // TODO: This is inefficient because you'd be using a copy
+    // constructor. To properly fix this, everything should be pointers
+    // (unique pointers, to be safe, but it's fine if it's just standard
+    // pointers) and you should be doing
+    // swaps.
     v_data.A[u].neighbors = res;
   }
 
+  // TODO: Same issue here -- why is this separate from resizeNEIGHBORS?
   // A function that determines whether it is worth it to resize neighbors
   void adjustNEIGHBORS(uintE u,size_t amount) {
     amount = std::max(amount,INIT_VALUE_FOR_SIZE);
     size_t cur = v_data.A[u].neighbors.m;
+    // TODO: ceil(log2(amount)) < ceil(log2(cur))?
     if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
       return;
     }
@@ -156,6 +203,7 @@ struct dynamic_symmetric_graph {
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
 
+    // TODO: Don't need monoidm as a separate variable. Inline it.
     pbbs::maxm<uintE> monoidm = pbbs::maxm<uintE>();
     uintE ma = pbbs::reduce(vertices,monoidm);
 
