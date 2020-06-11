@@ -18,9 +18,10 @@
   //inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
 //};
 
+template <class Graph>
 struct HSet {
 
-  symmetric_graph<symmetric_vertex, pbbs::empty>* G; //Graph
+  Graph* G; //Graph
 
   sparse_table<uintE, pbbs::empty, hash_uintE> H; //Set of elements such that deg(x) >= |H|
   size_t hindex; //|H|
@@ -36,9 +37,10 @@ struct HSet {
   pbbs::sequence<uintE> lowDegD;
   sparse_table<uintE, uintE, hash_uintE> highDegD;
 
-
+  //Doesn't have to be symmetric vertex
+  //Specify templatized graph
   //a - threshold for low and high degree vertices
-  HSet(symmetric_graph<symmetric_vertex, pbbs::empty>& _G) {
+  HSet(Graph& _G) {
 
     G = &_G;
     threshold = G->n;
@@ -74,9 +76,7 @@ struct HSet {
     
     //TODO: Consider vertices whose old degree and new degree are both above hindex
     //TODO: Update sets B and H
-    batch = pbbslib::sample_sort(batch, [&] (const uintE u, const uintE v) { 
-      return G->get_vertex(u).getOutDegree() > G->get_vertex(v).getOutDegree();
-    });
+    batch = integer_sort(batch.slice(), [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
     //Stores degrees and sorts in descending order
     sequence<uintE> deg = pbbs::sequence<uintE>(batch.size());
     par_for(0, batch.size(), [&] (size_t i) {
@@ -105,11 +105,12 @@ struct HSet {
         highDegs = pbbs::filter(highDegD.entries(), inRange);
       }
     }
-
+    /*
     highDegs = pbbslib::sample_sort(highDegs, [&] (const std::tuple<uintE, uintE> u, const std::tuple<uintE, uintE> v) {
       return std::get<0>(u) < std::get<0>(v);
     });
-
+    */
+    highDegs = integer_sort(highDegs.slice(), [&] (std::tuple<uintE, uintE> v) { return std::get<0>(v); });
     //Computes Prefix Sum (note scan_add_inplace is exclusive)
     //lowDeg (even if lowDeg is empty it still checks whether or not it can empty B out)
     pbbslib::scan_add_inplace(lowDegSum);
@@ -143,19 +144,9 @@ struct HSet {
     //--------------------------RETURN HINDEX--------------------------//
     uintE hindexIncrease = pbbslib::reduce_min(indexM);
     
-    if (hindex != UINT_E_MAX) { //Check highDegD because new hindex not in lowDeg
+    if (hindex == UINT_E_MAX) { //Check highDegD because new hindex not in lowDeg
 
-      auto highDegSum = pbbs::sequence<uintE>(highDegs.size());
-      par_for(0, highDegs.size(), [&] (size_t i) {
-        highDegSum[i] = std::get<1>(highDegs[i]);
-      });
-
-      //Inclusive Prefix sum
-      pbbslib::scan_add_inplace(highDegSum);
-      par_for(0, highDegs.size(), [&] (size_t i) {
-        highDegSum[i] += std::get<1>(highDegs[i]) + lowDegSum[lowDegSum.size() - 1]; //Adds on last element of lowDegSum
-      });
-
+      pbbs::sequence<uintE> highDegSum;
       if (highDegs.size() == 0) {
         highDegs = pbbs::sequence<std::tuple<uintE, uintE>>(1);
         highDegs[0] = std::make_tuple(0,0);
@@ -163,8 +154,21 @@ struct HSet {
         highDegSum = pbbs::sequence<uintE>(1);
         highDegSum[0] = 0;
       }
+      else {
+        highDegSum = pbbs::sequence<uintE>(highDegs.size());
+        par_for(0, highDegs.size(), [&] (size_t i) {
+          highDegSum[i] = std::get<1>(highDegs[i]);
+        });
 
-      //Stores actual amount h-index increases by
+        //Inclusive Prefix sum
+        pbbslib::scan_add_inplace(highDegSum);
+        par_for(0, highDegs.size(), [&] (size_t i) {
+          highDegSum[i] += std::get<1>(highDegs[i]) + lowDegSum[lowDegSum.size() - 1]; //Adds on last element of lowDegSum
+        });
+      }
+      
+
+      
       auto highM = pbbs::sequence<uintE>(highDegs.size());
 
       par_for(0, highM.size() - 1, [&] (size_t i) {
@@ -222,8 +226,9 @@ struct HSet {
     return hindex;
   }
 
+  //--------------------------ADD TO C--------------------------//
   void updateC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
-    //--------------------------ADD TO C--------------------------//
+    
     //Subraction
     sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
     
@@ -285,7 +290,7 @@ struct HSet {
 
 };
 
-
+/*
 struct graph {
 
   public:
@@ -328,3 +333,4 @@ struct graph {
       return triangles;
     }
 };
+*/

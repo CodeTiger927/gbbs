@@ -1,6 +1,6 @@
 #include "h-index.h"
 #include <iostream>
-
+/*
 int main() {
 
   symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
@@ -15,6 +15,7 @@ int main() {
   h.erase(batch);
 
 }
+*/
 
 /* Test rslice, interval from a to b in reverse (where a > b) = rslice(size - a, size - b)
 int main() {
@@ -79,7 +80,7 @@ int main() {
   return 0;
 }
 */
-/*
+
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -102,14 +103,15 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   //For some reason GA has type symmetric_graph<csv_bytepd_amortized, pbbs::empty> which doesn't match my symmetric_graph<symmetric_vertex, pbbs::empty>&
   //I don't know how to fix that so for testing I just commented out 73 and uncommented out line 69-70
   symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
-  HSet h = HSet(G);
+  HSet<Graph> h = HSet(GA);
   h.threshold = 1; //For debugging, to make sure that whatever threshold is, it still works
-
+  
   //HSet h = HSet(GA); 
   auto batch = pbbs::sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
     batch[i] = i;
   });
+  
   h.insert(batch);
   cout << "HINDEX: " << h.hindex << endl;
 
@@ -117,4 +119,3 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 }
 
 generate_symmetric_main(AppHIndex_runner, false);
-*/
