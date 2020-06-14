@@ -285,6 +285,7 @@ struct HSet {
       }
 
       else {
+        // TODO: Why do you need C and D to be separate? What's the point?
         lowDegC[deg[indices[i]]]->append(extra);
         lowDegD[deg[indices[i]]] += extra.size();
       }

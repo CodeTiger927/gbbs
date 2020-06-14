@@ -218,6 +218,7 @@ namespace pbbs {
         ns[i] = i < n ? s[i] : a[i - n];
       });
 
+// TODO: You have to check if you have alloc control over s.
       free(s);      
 
       s = ns;
