@@ -102,6 +102,8 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   //For some reason GA has type symmetric_graph<csv_bytepd_amortized, pbbs::empty> which doesn't match my symmetric_graph<symmetric_vertex, pbbs::empty>&
   //I don't know how to fix that so for testing I just commented out 73 and uncommented out line 69-70
+  // TODO: This part needs to be fixed -- why are you re-reading the graph? You have to
+  // templatize everything like we discussed.
   symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
   HSet<Graph> h = HSet(GA);
   h.threshold = 1; //For debugging, to make sure that whatever threshold is, it still works
