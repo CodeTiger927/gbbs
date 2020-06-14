@@ -258,7 +258,8 @@ struct HSet {
     par_for(0, difference.size() + 1, [&] (size_t i) {
       indices[i] = i;
     });
-
+    // TODO: Why do you need a separate difference array to make this function f?
+    // Can't you just check deg directly?
     auto f = [&] (size_t i) { return difference[i] || i == batch.size() - 1; };
     indices = pbbs::filter(indices, f);
     //Uses indices sequence to know the index of last entry for each clustered deg
@@ -285,7 +286,7 @@ struct HSet {
       }
 
       else {
-        // TODO: Why do you need C and D to be separate? What's the point?
+        // TODO: Why do you need C and D to be separate? What's the point? Also, where do you use C?
         lowDegC[deg[indices[i]]]->append(extra);
         lowDegD[deg[indices[i]]] += extra.size();
       }
