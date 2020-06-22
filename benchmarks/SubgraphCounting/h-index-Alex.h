@@ -29,7 +29,7 @@ struct HSetAlex {
 		cN = pbbslib::dyn_arr<uintE>(SIZE_OF_GRAPH);
 		HIndex = 0;
 		BSize = 0;
-		B = make_sparse_table<uintE,bool,hash_uintE>(0,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		B = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 	}
 
 	void resizeC(uintE v,uintE amount) {
@@ -70,7 +70,6 @@ struct HSetAlex {
 		});
 		pbbslib::scan_add_inplace(cNs);
 		sequence<uintE> worksOrNo = sequence<uintE>(cNs.size(),[&](size_t i) {
-			cout << curN - cNs[i] << endl;
 			if(curN - cNs[i + 1] >= HIndex + i + 1) {
 				return (uintE)(HIndex + i + 1);
 			}else{
@@ -82,6 +81,7 @@ struct HSetAlex {
 		par_for(0,NHIndex - (HIndex - cNs[NHIndex + 1]),[&](size_t i) {
 			B.insert(allH[i]);
 		});
+		BSize = NHIndex - (HIndex - cNs[NHIndex + 1]);
 		HIndex = NHIndex;
 	}
 };
