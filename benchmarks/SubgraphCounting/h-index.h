@@ -53,37 +53,6 @@ struct HSet {
     pbbs::sequence<uintE> sortedBatch;
     if (!sorted) {
       sortedBatch = integer_sort(batch, [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
-//--------------------------INSERT--------------------------//
-  uintE insert(sequence<uintE> batch) {
-    
-    //TODO: Consider vertices whose old degree and new degree are both above hindex
-    //TODO: Update sets B and H
-
-    // TODO: Why do you need to do batch.slice()? Versus just batch -- and same with .rslice()
-    // TODO: You shouldn't be assigning to batch like this -- you're not properly getting rid
-    // of the memory in batch and you're doing some weird copy assignment here.
-    // Instead, you should have an out array and properly delete batch, and use the sorted
-    // out array.
-    batch = integer_sort(batch.slice(), [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
-    //Stores degrees and sorts in descending order
-    sequence<uintE> deg = pbbs::sequence<uintE>(batch.size());
-    par_for(0, batch.size(), [&] (size_t i) {
-      // TODO: What's with this double assignment? What are you trying to do?
-      deg[i] = deg[i] = G->get_vertex(batch[i]).getOutDegree();
-    });
-
-    //--------------------------Compute H-index--------------------------//
-
-    pbbs::sequence<uintE> lowDegSum = pbbs::sequence<uintE>(0);
-    pbbs::sequence<std::tuple<uintE, uintE>> highDegs = pbbs::sequence<std::tuple<uintE, uintE>>(0);
-
-    
-    // TODO: What is low deg d and why do you need it? How is it different from C?
-    // TODO: It might be better if you just had the simpler low degree code here, instead of
-    // trying to do this fancy thing with lowDeg vs highDeg -- especially since we haven't
-    // even tested this and ensured that it works
-    if (hindex + batch.size() <= threshold) { //hindex to hindex + batch.size() completely in lowDeg
-      lowDegSum = lowDegD.slice(hindex + 1, hindex + batch.size() + 1);
     }
     else {
       sortedBatch = batch;
@@ -118,18 +87,6 @@ struct HSet {
     par_for(1, sum.size() + 1, [&] (size_t i) {
       if (sum[i - 1] + i < deg.size()) {
         M[i] = (deg[sum[i - 1] + i] > hindex + i);
-
-    // TODO: What is M?
-    //Creates the binary array described as M
-    pbbs::sequence<bool> M = pbbs::sequence<bool>(lowDegSum.size() + 1);
-
-    M[0] = (deg[B.size()] > hindex);
-    par_for(0, lowDegSum.size(), [&] (size_t i) {
-      // TODO: Why do you have the +1 here? Just make your parallel for in the correct range.
-      // TODO: Don't need to do an if else like this; just use the full boolean expression --
-      // lowDegSum[i] < deg.size() && whatever.
-      if (lowDegSum[i] < deg.size()) {
-        M[i + 1] = (deg[lowDegSum[i]] > hindex + 1 + i);
       }
       else {
         M[i] = false;
@@ -143,16 +100,8 @@ struct HSet {
     });
 
     uintE hindexIncrease = pbbslib::reduce_min(indexM);
-<<<<<<< HEAD
     M.clear();
     indexM.clear();
-=======
-    // TODO: What you're doing here doesn't make sense to me. Explain it better. Also, where
-    // do you update H? What about updating D? Why was C never used?
-
-
-    if (hindex == UINT_E_MAX) { //Check highDegD because new hindex not in lowDeg
->>>>>>> c0b81a12bff7ebd93681c98859c6ebc4e935872f
 
     if (hindexIncrease == UINT_E_MAX) {
       hindexIncrease = sortedBatch.size();
@@ -375,25 +324,12 @@ struct HSet {
       }
 
       else {
-<<<<<<< HEAD
+
         for (size_t i = 0; i < C[deg]->size(); i++) {
 
           uintE v = (*C[deg])[i];
           H.insert(std::make_tuple(v, pbbs::empty()));
           num++;
-=======
-        // TODO: Why do you need C and D to be separate? What's the point? Also, where do you use C?
-        lowDegC[deg[indices[i]]]->append(extra);
-        lowDegD[deg[indices[i]]] += extra.size();
-      }
-    });
-  }
-	
-  uintE change(uintE v) {
-/*
-    erase(v);
-    insert(v);
->>>>>>> c0b81a12bff7ebd93681c98859c6ebc4e935872f
 
           if (v == target) {
             flag = true;

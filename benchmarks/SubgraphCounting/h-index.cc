@@ -102,7 +102,6 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   //-rounds 1 to run once
 
-<<<<<<< HEAD
   HSet<Graph> h = HSet<Graph>(GA);
   
   auto batch1 = pbbs::sequence<uintE>(1);
@@ -151,15 +150,6 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   h.erase(batch2); //removes deg 2 and deg 3
   std::cout << "HINDEX: " << h.hindex << endl;
   std::cout << "B SIZE: " << h.B << endl;
-=======
-  //For some reason GA has type symmetric_graph<csv_bytepd_amortized, pbbs::empty> which doesn't match my symmetric_graph<symmetric_vertex, pbbs::empty>&
-  //I don't know how to fix that so for testing I just commented out 73 and uncommented out line 69-70
-  // TODO: This part needs to be fixed -- why are you re-reading the graph? You have to
-  // templatize everything like we discussed.
-  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
-  HSet<Graph> h = HSet(GA);
-  h.threshold = 1; //For debugging, to make sure that whatever threshold is, it still works
->>>>>>> c0b81a12bff7ebd93681c98859c6ebc4e935872f
   
   /*
   auto batch = pbbs::sequence<uintE>(6);
