@@ -219,7 +219,12 @@ namespace pbbs {
         ns[i] = i < n ? s[i] : a[i - n];
       });
 
+<<<<<<< HEAD
       pbbs::delete_array<T>(s, n);      
+=======
+// TODO: You have to check if you have alloc control over s.
+      free(s);      
+>>>>>>> c0b81a12bff7ebd93681c98859c6ebc4e935872f
 
       s = ns;
       n += a.size();
