@@ -2,6 +2,7 @@
 
 #include "utilities.h"
 #include <assert.h>
+#include "sequence_ops.h"
 
 #define hello foo
 
@@ -218,13 +219,12 @@ namespace pbbs {
         ns[i] = i < n ? s[i] : a[i - n];
       });
 
-      free(s);      
+      pbbs::delete_array<T>(s, n);      
 
       s = ns;
-      n = n + a.size();
-      
-      
+      n += a.size();
     }
+
 
   private:
     template <class Seq>

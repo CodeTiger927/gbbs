@@ -11,13 +11,6 @@
 #include "ligra/pbbslib/dyn_arr.h"
 #include "pbbslib/sequence.h"
 
-// For hashing sparse table
-
-//Already defined
-//struct hash_uintE {
-  //inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
-//};
-
 template <class Graph>
 struct HSet {
 
@@ -28,14 +21,9 @@ struct HSet {
 
   sparse_table<uintE, pbbs::empty, hash_uintE> P;
 
-  pbbs::sequence<uintE> B; //Set of elements such that deg(x) == |H|
+  uintE B; //Number of elements such that deg(x) == |H|
 
-  pbbs::sequence<pbbs::sequence<uintE>*> lowDegC; //Map of elements not in H fed by degree up to a threshold
-  sparse_table<uintE, pbbs::sequence<uintE>*, hash_uintE> highDegC; // Map of elements not in H sorted by degree greater than the threshold
-  uintE threshold;
-
-  pbbs::sequence<uintE> lowDegD;
-  sparse_table<uintE, uintE, hash_uintE> highDegD;
+  pbbs::sequence<pbbs::sequence<uintE>*> C; //Map of elements not in H fed by degree up to a threshold
 
   //Doesn't have to be symmetric vertex
   //Specify templatized graph
@@ -43,7 +31,6 @@ struct HSet {
   HSet(Graph& _G) {
 
     G = &_G;
-    threshold = G->n;
 
     
     H = make_sparse_table<uintE, pbbs::empty, hash_uintE> //|H| has to be between m/n and sqrt(2m)
@@ -53,181 +40,220 @@ struct HSet {
     P = make_sparse_table<uintE, pbbs::empty, hash_uintE>
       (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
 
-    B = pbbs::sequence<uintE>(0);
+    B = 0;
 
-    lowDegC = sequence<pbbs::sequence<uintE>*>(threshold + 1); //possible degrees range from 0 ... a
-    // TODO: You can reduce the search space of highDegC by taking G->n - threshold
-    // It won't make a huge difference, but maybe it'll be better for the hash
-    // function to distribute these values evenly, since we don't have any
-    // values in ehre from 0 .. threshold
-    highDegC = make_sparse_table<uintE, pbbs::sequence<uintE>*, hash_uintE>
-      (G->n, std::make_tuple(UINT_E_MAX, nullptr), hash_uintE());
-
-    par_for(0, lowDegC.size(), [&] (size_t i) { lowDegC[i] = new sequence<uintE>(0); });
-
-    lowDegD = sequence<uintE>(threshold + 1);
-    par_for(0, lowDegD.size(), [&] (size_t i) { lowDegD[i] = 0; });
-    highDegD = make_sparse_table<uintE, uintE, hash_uintE>
-      (G->n, std::make_tuple(UINT_E_MAX, UINT_E_MAX), hash_uintE());
+    C = sequence<pbbs::sequence<uintE>*>(G->n + 10); //possible degrees range from 0 ... a
+    par_for(0, C.size(), [&] (size_t i) { C[i] = new sequence<uintE>(0); });
   }
 
-//--------------------------INSERT--------------------------//
-  uintE insert(sequence<uintE> batch) {
-    
-    //TODO: Consider vertices whose old degree and new degree are both above hindex
-    //TODO: Update sets B and H
-    batch = integer_sort(batch.slice(), [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
-    //Stores degrees and sorts in descending order
-    sequence<uintE> deg = pbbs::sequence<uintE>(batch.size());
-    par_for(0, batch.size(), [&] (size_t i) {
-      deg[i] = deg[i] = G->get_vertex(batch[i]).getOutDegree();
-    });
+  //--------------------------INSERT--------------------------//
+  //batch is a sequence of vertex ids (that can be used to get from graph)
+  uintE insert(sequence<uintE> batch, bool sorted = false) {
 
-    //--------------------------Compute H-index--------------------------//
-
-    pbbs::sequence<uintE> lowDegSum = pbbs::sequence<uintE>(0);
-    pbbs::sequence<std::tuple<uintE, uintE>> highDegs = pbbs::sequence<std::tuple<uintE, uintE>>(0);
-
-    
-    if (hindex + batch.size() <= threshold) { //hindex to hindex + batch.size() completely in lowDeg
-      lowDegSum = lowDegD.slice(hindex + 1, hindex + batch.size() + 1);
+    pbbs::sequence<uintE> sortedBatch;
+    if (!sorted) {
+      sortedBatch = integer_sort(batch, [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
     }
     else {
-      if (hindex <= threshold) { //Range in both
-        lowDegSum = lowDegD.slice(hindex + 1, lowDegD.size());
-
-        auto inRange = [&] (std::tuple<uintE, uintE> deg) { return std::get<0>(deg) > threshold && std::get<0>(deg) <= hindex + batch.size(); };
-        highDegs = pbbs::filter(highDegD.entries(), inRange);
+      sortedBatch = batch;
+    } 
+    batch.clear();
+    //Stores degrees and sorts in descending order
+    sequence<uintE> deg = pbbs::sequence<uintE>(sortedBatch.size());
+    par_for(0, sortedBatch.size(), [&] (size_t i) {
+      deg[i] = deg[i] = G->get_vertex(sortedBatch[i]).getOutDegree();
+    });
     
-      }
-      else { //hindex to hindex + batch.size() completely in lowDeg
-        auto inRange = [&] (std::tuple<uintE, uintE> deg) { return std::get<0>(deg) > hindex && std::get<0>(deg) <= hindex + batch.size(); };
-        highDegs = pbbs::filter(highDegD.entries(), inRange);
-      }
-    }
-    /*
-    highDegs = pbbslib::sample_sort(highDegs, [&] (const std::tuple<uintE, uintE> u, const std::tuple<uintE, uintE> v) {
-      return std::get<0>(u) < std::get<0>(v);
+    //--------------------------Compute H-index--------------------------//
+    pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(sortedBatch.size());
+    
+    par_for(0, sortedBatch.size(), [&] (size_t i) {
+      sum[i] = C[hindex + i + 1]->size();
     });
-    */
-    highDegs = integer_sort(highDegs.slice(), [&] (std::tuple<uintE, uintE> v) { return std::get<0>(v); });
     //Computes Prefix Sum (note scan_add_inplace is exclusive)
-    //lowDeg (even if lowDeg is empty it still checks whether or not it can empty B out)
-    pbbslib::scan_add_inplace(lowDegSum);
-    par_for(0, batch.size() + 1, [&] (size_t i) {
-      lowDegSum[i] += lowDegD[hindex + i + 1]; //Compute inclusive sunm
+    pbbslib::scan_add_inplace(sum);
+    par_for(0, sum.size(), [&] (size_t i) {
+      sum[i] += C[hindex + i + 1]->size() + B; //Compute inclusive sunm
     });
-
+    
     //Creates the binary array described as M
-    pbbs::sequence<bool> M = pbbs::sequence<bool>(lowDegSum.size() + 1);
-
-    M[0] = (deg[B.size()] > hindex);
-    par_for(0, lowDegSum.size(), [&] (size_t i) {
-
-      if (lowDegSum[i] < deg.size()) {
-        M[i + 1] = (deg[lowDegSum[i]] > hindex + 1 + i);
+    pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size() + 1);
+    if (B < deg.size()) {
+      M[0] = (deg[B] > hindex);
+    }
+    else {
+      M[0] = false;
+    }
+    par_for(1, sum.size() + 1, [&] (size_t i) {
+      if (sum[i - 1] + i < deg.size()) {
+        M[i] = (deg[sum[i - 1] + i] > hindex + i);
       }
       else {
-        M[i + 1] = false;
+        M[i] = false;
       }
- 
-    });
+    });   
+
     //Find index of first 0
     pbbs::sequence<size_t> indexM = pbbs::sequence<size_t>(M.size());
     par_for(0, M.size(), [&] (size_t i) {
       indexM[i] = !M[i] ? i : UINT_E_MAX;
     });
 
-    //--------------------------ADD TO C--------------------------//
-    updateC(batch, deg);
-
-    //--------------------------RETURN HINDEX--------------------------//
     uintE hindexIncrease = pbbslib::reduce_min(indexM);
-    
-    if (hindex == UINT_E_MAX) { //Check highDegD because new hindex not in lowDeg
+    M.clear();
+    indexM.clear();
 
-      pbbs::sequence<uintE> highDegSum;
-      if (highDegs.size() == 0) {
-        highDegs = pbbs::sequence<std::tuple<uintE, uintE>>(1);
-        highDegs[0] = std::make_tuple(0,0);
-
-        highDegSum = pbbs::sequence<uintE>(1);
-        highDegSum[0] = 0;
-      }
-      else {
-        highDegSum = pbbs::sequence<uintE>(highDegs.size());
-        par_for(0, highDegs.size(), [&] (size_t i) {
-          highDegSum[i] = std::get<1>(highDegs[i]);
-        });
-
-        //Inclusive Prefix sum
-        pbbslib::scan_add_inplace(highDegSum);
-        par_for(0, highDegs.size(), [&] (size_t i) {
-          highDegSum[i] += std::get<1>(highDegs[i]) + lowDegSum[lowDegSum.size() - 1]; //Adds on last element of lowDegSum
-        });
-      }
-      
-
-      
-      auto highM = pbbs::sequence<uintE>(highDegs.size());
-
-      par_for(0, highM.size() - 1, [&] (size_t i) {
-        //Interval:        deg1              to            deg 2
-        //          std::get<0>(highDegs[i]) to std::get<0>(highDegs[i + 1])
-
-        if (highDegSum[i] >= deg.size() || deg[highDegSum[i]] < std::get<0>(highDegs[i])) { //New hindex is below this interval
-          highM[i] = std::get<0>(highDegs[i]);
-        }
-        else if (deg[highDegSum[i]] > std::get<0>(highDegs[i + 1])) { //New hindex is above this interval
-          highM[i] = UINT_E_MAX; //Flag, equivalent to true in lowDeg M
-        }
-        else { //New hindex in this interval
-          highM[i] = deg[highDegSum[i]];
-        }
-      });
-                            
-      //Last interval: final degree in highDegs to hindex + batch.size()
-      if (highDegSum[highDegs.size() - 1] >= deg.size() || deg[highDegSum[highDegs.size() - 1]] < std::get<0>(highDegs[highDegs.size() - 1])) { //New hindex is below this interval
-        highM[highDegs.size() - 1] = std::get<0>(highDegs[highDegs.size() - 1]);
-      }
-      //hindex cannot be above this range
-
-      else { //New hindex in this interval
-        highM[highDegs.size() - 1] = deg[highDegSum[highDegs.size() - 1]];
-      }
-
-      //Finding first non number that is not UINT_E_MAX
-      auto indexHighM = pbbs::sequence<uintE>(highM.size());
-      par_for(0, highM.size(), [&] (size_t i) {
-        indexHighM[i] = highM[i] != UINT_E_MAX ? i : UINT_E_MAX;
-      });
-
-      auto index = pbbslib::reduce_min(indexHighM);
-
-      if (index == UINT_E_MAX) {
-        hindex += batch.size();
-      }
-      else {
-        hindex = highM[index];
-      }
-
+    if (hindexIncrease == UINT_E_MAX) {
+      hindexIncrease = sortedBatch.size();
     }
+    //Update B
+    uintE greaterThanH = hindex + (C[hindex]->size() - B); //Number of vertices greater than hindex
+    pbbs::sequence<uintE> sizesBetweenH = pbbs::sequence<uintE>(hindexIncrease); //Sizes of each entry in C that is between old hindex
+    par_for(0, hindexIncrease, [&] (size_t i) {
+      sizesBetweenH[i] = C[hindex + i]->size();
+    });
+    uintE betweenH = pbbslib::reduce_add(sizesBetweenH); //Number of vertices between old hindex and (new hindex - 1)
+    uintE aboveNewH = greaterThanH - betweenH;
 
+    uintE added = pbbs::binary_search(deg, [&] (uintE x) { //Number of vertices that are above hindex
+      return x >= hindex + hindexIncrease;
+    });
+
+    addToC(sortedBatch, deg);
+    hindex += hindexIncrease;
+    //Update C, hindexIncrease);
+    B = C[hindex]->size() - ((aboveNewH + added) - hindex); //Number of vertices not in B is equal to the number of vertices greater than hindex minus hindex
+
+    //Slight variation to hindex paper - C will store all vertices (instead of the vertices not in B)
+
+
+    deg.clear();
+    sum.clear();   
+
+    return hindex;
+  }
+  
+  //--------------------------ERASE--------------------------//   
+  uintE erase(sequence<uintE> batch, bool sorted = false) {
+
+    pbbs::sequence<uintE> sortedBatch;
+    if (!sorted) {
+      sortedBatch = integer_sort(batch, [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
+    }
     else {
-      hindex += hindexIncrease;
+      sortedBatch = batch;
+    } 
+    batch.clear();
+    //Stores degrees and sorts in ascending order
+    sequence<uintE> deg = pbbs::sequence<uintE>(sortedBatch.size());
+    par_for(0, sortedBatch.size(), [&] (size_t i) {
+      deg[i] = G->get_vertex(sortedBatch[i]).getOutDegree();
+    });
+
+    //--------------------------Compute H-index--------------------------//
+    pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(std::min(sortedBatch.size(), hindex) + 1).rslice();
+    
+    par_for(0, sum.size(), [&] (size_t i) {
+      sum[i] = C[hindex - i]->size();
+    });
+
+    //Computes Prefix Sum (note scan_add_inplace is exclusive)
+    pbbslib::scan_add_inplace(sum);
+    par_for(0, sum.size(), [&] (size_t i) {
+      sum[i] += C[hindex - i]->size(); //Compute inclusive sunm
+    });
+
+    pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size());
+
+    //Creates the binary array described as M
+    if (C[hindex]->size() - B < deg.size()) {
+      M[0] = (deg[C[hindex]->size() - B] >= hindex);
+    }
+    else {
+      M[0] = false;
+    }
+    par_for(1, sum.size(), [&] (size_t i) {
+      if (sum[i] - i < deg.size()) {
+        M[i] = (deg[sum[i] + i] >= hindex - i);
+      }
+      else {
+        M[i] = false;
+      }
+    });
+    sum.clear();
+
+    //Find index of first 0
+    pbbs::sequence<size_t> indexM = pbbs::sequence<size_t>(M.size());
+    par_for(0, M.size(), [&] (size_t i) {
+      indexM[i] = !M[i] ? i : UINT_E_MAX;
+    });
+
+    uintE hindexDecrease = pbbslib::reduce_min(indexM);
+    M.clear();
+    indexM.clear();
+
+    if (hindexDecrease == UINT_E_MAX) {
+      hindexDecrease = std::min(sortedBatch.size(), hindex);
     }
 
+    //Slight variation to hindex paper - C will store all vertices (instead of the vertices not in B)
     
-    return hindex;
-  }
+    //Updating B
+    uintE greaterThanH = hindex + (C[hindex]->size() - B); //Number of vertices greater than hindex
+    pbbs::sequence<uintE> sizesBetweenH = pbbs::sequence<uintE>(hindexDecrease); //Sizes of each entry in C that is between old hindex
+    par_for(0, hindexDecrease, [&] (size_t i) {
+      sizesBetweenH[i] = C[hindex - i - 1]->size();
+    });
+    uintE betweenH = pbbslib::reduce_add(sizesBetweenH); //Number of vertices between old hindex and (new hindex - 1)
+    uintE aboveNewH = greaterThanH + betweenH;
 
-//--------------------------ERASE--------------------------//   
-  uintE erase(sequence<uintE> batch) {
+    uintE removed = pbbs::binary_search(deg, [&] (uintE x) { //Number of vertices that are above hindex
+      return x >= hindex - hindexDecrease;
+    });
+    
+    hindex -= hindexDecrease;
+    //Update C
+    removeFromC(sortedBatch, deg);
+    B = C[hindex]->size() - ((aboveNewH - removed) - hindex); //Number of vertices not in B is equal to the number of vertices greater than hindex minus hindex
+
     return hindex;
   }
+  
 
   //--------------------------ADD TO C--------------------------//
-  void updateC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
+  void addToC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
+    
+    //Subraction
+    sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
+    
+    par_for(0, deg.size() - 1, [&] (size_t i) {
+      difference[i] = (deg[i] != deg[i + 1]);  
+    });
+
+    sequence<size_t> idx = pbbs::sequence<size_t>(difference.size() + 1);
+
+    par_for(0, difference.size() + 1, [&] (size_t i) {
+      idx[i] = i;
+    });
+
+    auto f = [&] (size_t i) { return difference[i] || i == batch.size() - 1; };
+    auto indices = pbbs::filter(idx, f);
+    idx.clear();
+    difference.clear();
+    //Uses indices sequence to know the index of last entry for each clustered deg
+    par_for(0, indices.size(), [&] (size_t i) {
+      size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
+      size_t end = indices[i] + 1;
+
+      pbbs::sequence<uintE> extra = batch.slice(start, end);
+      
+      C[deg[indices[i]]]->append(extra);
+    });
+    indices.clear();
+  }
+  
+  //--------------------------REMOVE FROM C--------------------------//
+  void removeFromC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
     
     //Subraction
     sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
@@ -251,41 +277,67 @@ struct HSet {
 
       pbbs::sequence<uintE> extra = batch.slice(start, end);
       
-      if (deg[i] > threshold) {
-        if (highDegC.find(deg[indices[i]], nullptr) == nullptr) {
-          highDegC.insert(std::make_tuple(deg[indices[i]], &extra));
+      auto remove = [&] (uintE element) {
+        for (size_t i = 0; i < extra.size(); i++) {
+          if (element == extra[i]) return false;
         }
-        else {
-          highDegC.find(deg[indices[i]], nullptr)->append(extra);
-        }
+        return true;
+      };
+      auto temp = pbbs::filter(*C[deg[indices[i]]], remove);
+      C[deg[indices[i]]] = &temp;
+    });
+  }
+  
+  //batch[i] = vertex id, degs[i] = vertex degree
+  uintE change(sequence<uintE> batch, sequence<uintE> degs) {
+    pbbs::sequence<uintE> sortedBatch = integer_sort(batch, [&] (uintE v) { return G->get_vertex(v).getOutDegree(); }).rslice();
+    erase(sortedBatch, true);
+    //Change in graph using batch and degs
+    insert(sortedBatch, true);
 
-        if (highDegD.find(deg[indices[i]], UINT_E_MAX) == UINT_E_MAX) {
-          highDegD.insert(std::make_tuple(deg[indices[i]], extra.size()));
+    return hindex;
+  }
+
+  //Returns tuple of contains and the sparse table of updated H
+  //Instead of iterating through everything in insertion or deletion, we could just do it inside triangle counting
+  //When we test for elements inside H, for the first vertex we can iterate through C looking for a vertex while adding everything to H
+  //For the rest of the vertices, we can just use H.contains(target)
+  std::tuple<bool, sparse_table<uintE, pbbs::empty, hash_uintE>> containedInH(uintE target) {
+    size_t num = 0;
+    uintE deg = hindex;
+    bool flag = false;
+    while (num < hindex) {
+
+      if (deg == hindex) {
+        for (size_t i = 0; i < B; i++) {
+
+          uintE v = (*C[deg])[i];
+          H.insert(std::make_tuple(v, pbbs::empty()));
+          num++;
+
+          if (v == target) {
+            flag = true;
+          }
         }
-        else {
-          highDegD.change(deg[indices[i]], highDegD.find(deg[indices[i]], UINT_E_MAX) + extra.size()); 
-        }
+        deg++;
       }
 
       else {
-        lowDegC[deg[indices[i]]]->append(extra);
-        lowDegD[deg[indices[i]]] += extra.size();
-      }
-    });
-  }
-	
-  uintE change(uintE v) {
-/*
-    erase(v);
-    insert(v);
+        for (size_t i = 0; i < C[deg]->size(); i++) {
 
-    //Why only add elements to P in an update?
-    //What is the point of maintaining the dictionary parallel to C? Can't we just add during the update?
-    if (G->get_vertex(v).getOutDegree() >= 2 * hindex) {
-      P.insert(std::make_tuple(v, pbbs::empty()));
+          uintE v = (*C[deg])[i];
+          H.insert(std::make_tuple(v, pbbs::empty()));
+          num++;
+
+          if (v == target) {
+            flag = true;
+          }
+        }
+        deg++;
+      }
     }
-*/
-    return hindex;
+
+    return std::make_tuple(flag, H);
   }
 
 };

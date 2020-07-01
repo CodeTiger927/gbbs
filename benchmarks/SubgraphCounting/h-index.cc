@@ -1,5 +1,6 @@
 #include "h-index.h"
 #include <iostream>
+
 /*
 int main() {
 
@@ -81,6 +82,7 @@ int main() {
 }
 */
 
+
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -100,21 +102,81 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   //-rounds 1 to run once
 
-  //For some reason GA has type symmetric_graph<csv_bytepd_amortized, pbbs::empty> which doesn't match my symmetric_graph<symmetric_vertex, pbbs::empty>&
-  //I don't know how to fix that so for testing I just commented out 73 and uncommented out line 69-70
-  symmetric_graph<symmetric_vertex, pbbs::empty> G = gbbs_io::read_unweighted_symmetric_graph(P.getArgument(0), false);
-  HSet<Graph> h = HSet(GA);
-  h.threshold = 1; //For debugging, to make sure that whatever threshold is, it still works
+  HSet<Graph> h = HSet<Graph>(GA);
   
-  //HSet h = HSet(GA); 
+  auto batch1 = pbbs::sequence<uintE>(1);
+  batch1[0] = 4;
+
+  auto batch2 = pbbs::sequence<uintE>(2);
+  batch2[0] = 1;
+  batch2[1] = 5;
+
+  auto batch3 = pbbs::sequence<uintE>(1);
+  batch3[0] = 0;
+
+  auto batch4 = pbbs::sequence<uintE>(3);
+  batch4[0] = 1;
+  batch4[1] = 5;
+  batch4[2] = 0;
+  
+  h.insert(batch1); //1 vertex with deg 1
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+
+  h.insert(batch3); //1 vertex with deg 3
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+
+  h.insert(batch2); //2 vertices with deg 2
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "------------------------------------------" << endl;
+
+  std::tuple<bool, sparse_table<uintE, pbbs::empty, hash_uintE>> info = h.containedInH(0);
+  sparse_table<uintE, pbbs::empty, hash_uintE> H = std::get<1>(info);
+  std::cout << "Contains Vertex 0: " << std::get<0>(info) << endl;
+  pbbs::sequence<std::tuple<uintE, pbbs::empty>> flatten = H.entries();
+
+  std::cout << "SIZE OF H: " << flatten.size() << endl;
+  for (int i = 0; i < flatten.size(); i++) {
+    cout << std::get<0>(flatten[i]) << endl;
+  }
+
+  cout << "------------------------------------------" << endl;
+  h.erase(batch3); //removes 1 vertex with deg 3
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+
+  h.erase(batch2); //removes deg 2 and deg 3
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+  
+  /*
   auto batch = pbbs::sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
     batch[i] = i;
   });
-  
-  h.insert(batch);
-  cout << "HINDEX: " << h.hindex << endl;
 
+  h.insert(batch);
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "------------------------------------------" << endl;
+
+  std::tuple<bool, sparse_table<uintE, pbbs::empty, hash_uintE>> info = h.containedInH(4);
+  sparse_table<uintE, pbbs::empty, hash_uintE> H = std::get<1>(info);
+  std::cout << "Contains Vertex 0: " << std::get<0>(info) << endl;
+  pbbs::sequence<std::tuple<uintE, pbbs::empty>> flatten = H.entries();
+
+  std::cout << "SIZE OF H: " << flatten.size() << endl;
+  for (int i = 0; i < flatten.size(); i++) {
+    std::cout << std::get<0>(flatten[i]) << endl;
+  }
+
+  cout << "------------------------------------------" << endl;
+  h.erase(batch);
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B << endl;
+  */
   return 0;
 }
 
