@@ -24,6 +24,31 @@ struct HSetAlex {
 	pbbslib::dyn_arr<uintE> cN;
 	pbbslib::dyn_arr<uintE> vertices;
 
+	// This can potentially be O(N), but I think normally it would be smaller than O(h) in actual practice
+	sequence<uintE> allH() {
+		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * HIndex,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		par_for(HIndex + 1,n,[&](size_t i) {
+			if(cN.A[i] != 0) {
+				auto entries = C.A[i].entries();
+				par_for(0,entries.size(),[&](size_t j) {
+					all.insert(std::make_tuple(std::get<0>(entries[j]),true));
+				});
+			}
+		});
+		auto b = B.entries();
+		par_for(0,b.size(),[&](size_t i) {
+			all.insert(std::make_tuple(std::get<0>(b[i]),true));
+		});
+		auto f = all.entries();
+		return sequence<uintE>(f.size(),[&](size_t i) {return std::get<0>(f[i]);});
+	}
+
+	bool inH(uintE v,uintE degree) {
+		if(degree > HIndex) return true;
+		if(degree == HIndex) return B.find(v,false);
+		return false;
+	}
+
 	void init() {
 		n = 0;
 		C = pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>>(SIZE_OF_GRAPH);
@@ -98,9 +123,9 @@ struct HSetAlex {
 
 
 		curN -= filter(s,[&](uintE i){return vertices.A[i] >= HIndex;}).size();
-      par_for(0,s.size(),[&](size_t i) {
-         vertices.A[s[i]] = 0;
-      });
+      	par_for(0,s.size(),[&](size_t i) {
+         	vertices.A[s[i]] = 0;
+      	});
 
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
 			long long cur = HIndex - i;

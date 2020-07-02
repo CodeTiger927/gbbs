@@ -201,6 +201,7 @@ struct dynamic_symmetric_graph {
     sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
     uintE sumW = ds.size();
 
+
     this -> m += sumW;
 
     sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * ds.size(),[&](size_t i) {
@@ -211,11 +212,12 @@ struct dynamic_symmetric_graph {
       }
     });
 
+
     // Sorting to recalculate the degree
 
     // Using merge sort for stability, as it guarentees NlogN work regardless of data specifics.
     sequence<std::pair<uintE,uintE>> all = merge_sort(allS,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a < b;});
-    auto start = make_sparse_table<uintE,uintE,hash_uintE>(ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * ds.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
@@ -226,18 +228,23 @@ struct dynamic_symmetric_graph {
         }
       }
     });
+    // cout << start.m << endl;
     start.insert(std::make_tuple(all[0].first,0));
+
     v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
     auto entries = start.entries();
+
     par_for(0,entries.size(),[&](size_t i) {
       uintE cur = std::get<0>(entries[i]);
       v_data.A[cur].degree -= std::get<1>(entries[i]);
       adjustNeighbors(cur,v_data.A[cur].degree);
     });
+
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       v_data.A[cur.first].neighbors.insert(std::make_tuple(cur.second,true));
     });
+
   }
 
   // Remove multiple vertices in parallel

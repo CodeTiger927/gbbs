@@ -49,6 +49,17 @@ namespace pbbslib {
     dyn_arr(const dyn_arr& array) {
       A = pbbslib::new_array_no_init<E>(array.capacity);
       par_for(0, array.size, [&] (size_t i) { A[i] = array.A[i]; });
+      size = array.size;
+      capacity = array.capacity;
+    }
+
+    //Copy assignment operator
+    dyn_arr& operator=(const dyn_arr& array) {
+      A = pbbslib::new_array_no_init<E>(array.capacity);
+      par_for(0, array.size, [&] (size_t i) { A[i] = array.A[i]; });
+      size = array.size;
+      capacity = array.capacity;
+      return *this;
     }
 
     void del() {
