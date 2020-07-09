@@ -35,25 +35,28 @@ struct HSetAlex {
 				});
 			}
 		});
+
 		auto b = B.entries();
 		par_for(0,b.size(),[&](size_t i) {
 			all.insert(std::make_tuple(std::get<0>(b[i]),true));
 		});
+
 		auto f = all.entries();
+
 		return sequence<uintE>(f.size(),[&](size_t i) {return std::get<0>(f[i]);});
 	}
 
-	bool inH(uintE v,uintE degree) {
-		if(degree > HIndex) return true;
-		if(degree == HIndex) return B.find(v,false);
+	bool inH(uintE v) {
+		if(vertices.A[v] > HIndex) return true;
+		if(vertices.A[v] == HIndex) return B.find(v,false);
 		return false;
 	}
 
 	void init() {
 		n = 0;
-		C = pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>>(SIZE_OF_GRAPH);
-		cN = pbbslib::dyn_arr<uintE>(SIZE_OF_GRAPH);
-		vertices = pbbslib::dyn_arr<uintE>(SIZE_OF_GRAPH);
+		C = pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>>(0);
+		cN = pbbslib::dyn_arr<uintE>(0);
+		vertices = pbbslib::dyn_arr<uintE>(0);
 		HIndex = 0;
 		BSize = 0;
 		B = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
@@ -61,7 +64,7 @@ struct HSetAlex {
 
    void resizeV(size_t amount) {
       amount = std::max(amount,INIT_DYN_GRAPH_EDGE_SIZE);
-      size_t cur = vertices.capacity;
+      size_t cur = n;
       if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
          return;
       }
@@ -83,24 +86,27 @@ struct HSetAlex {
       pbbslib::free_array(cN.A);
       cN.A = nAAA;
       cN.capacity = nC;
+
+      n = amount;
    }
 
 	void resizeC(uintE v,uintE amount) {
 		amount = std::max(amount,(uintE)SIZE_OF_GRAPH);
 		if(amount != 0 && ceil(log2(amount)) == ceil(log2(C.A[v].m))) return;
 		auto entries = C.A[v].entries();
+
 		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 		par_for(0,entries.size(),1,[&](size_t i) {C.A[v].insert(entries[i]);});
 	}
 
 	void remove(sequence<uintE> s) {
-      n -= s.size();
+		n -= s.size();
 		sequence<uintE> all = merge_sort(s,[&](uintE a,uintE b) {return vertices.A[a] < vertices.A[b];});
-
 		long long curN = HIndex - BSize + cN.A[HIndex];
     	par_for(0,s.size(),[&](size_t i) {
-			C.A[vertices.A[s[i]]].change(s[i],false);
+			C.A[vertices.A[s[i]]].erase(s[i]);
 		});
+
     	auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,all.size(),1,[&](size_t i) {
 			if(i != 0) {
@@ -111,9 +117,11 @@ struct HSetAlex {
 			}
 		});
 
+
 		start.insert(std::make_tuple(vertices.A[all[0]],0));
 		cN.A[vertices.A[all[all.size() - 1]]] -= all.size();
 		auto entries = start.entries();
+
 
 		par_for(0,entries.size(),[&](size_t i) {
 			uintE cur = std::get<0>(entries[i]);
@@ -157,7 +165,7 @@ struct HSetAlex {
 	}
 
 	void insert(sequence<std::pair<uintE,uintE>> s) {
-      n += s.size();
+		n += s.size();
     	sequence<std::pair<uintE,uintE>> all = merge_sort(s,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
 		long long curN = HIndex - BSize + cN.A[HIndex];
     	auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
@@ -170,36 +178,47 @@ struct HSetAlex {
 				}
 			}
 		});
+
 		start.insert(std::make_tuple(all[0].second,0));
 		cN.A[all[all.size() - 1].second] += all.size();
 		auto entries = start.entries();
+
 		par_for(0,entries.size(),[&](size_t i) {
 			uintE cur = std::get<0>(entries[i]);
-			cN.A[cur] -= std::get<1>(entries[i]);
-			resizeC(cur,cN.A[cur]);
+			cN.A[std::get<0>(entries[i])] -= std::get<1>(entries[i]);
+			resizeC(std::get<0>(entries[i]),cN.A[cur]);
 		});
+
 		par_for(0,s.size(),[&](size_t i) {
 			C.A[s[i].second].insert(std::make_tuple(s[i].first,true));
 		});
+
+
 		curN += filter(s,[&](std::pair<uintE,uintE> i){return i.second >= HIndex;}).size();
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
 			uintE cur = i + HIndex;
 			if(cur >= SIZE_OF_GRAPH) return (uintE)0;
 			return cN.A[cur];
 		});
+
+
 		pbbslib::scan_add_inplace(cNs);
+
 		sequence<uintE> worksOrNo = sequence<uintE>(cNs.size(),[&](size_t i) {
-			if(curN - cNs[i + 1] >= HIndex + i + 1) {
-				return (uintE)(HIndex + i + 1);
+			if(curN - cNs[i] >= HIndex + i) {
+				return (uintE)(HIndex + i);
 			}else{
 				return HIndex;
 			}
 		});
+
+
 		uintE NHIndex = pbbs::reduce(worksOrNo,pbbs::maxm<uintE>());
 		if(NHIndex == HIndex) return;
 		auto allH = C.A[NHIndex].entries();
 		BSize = NHIndex - (curN - cNs[NHIndex - HIndex + 1]);
 		B = make_sparse_table(2 * BSize,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+
 		par_for(0,BSize,[&](size_t i) {
 			B.insert(allH[i]);
 		});
