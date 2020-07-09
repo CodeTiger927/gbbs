@@ -18,30 +18,8 @@ int main() {
 }
 */
 
-/* Test rslice, interval from a to b in reverse (where a > b) = rslice(size - a, size - b)
-int main() {
-  auto s = pbbs::sequence<uintE>(5);
-
-  for (int i = 0; i < 5; i++) {
-    s[i] = i;
-  }
-  size_t a = 2;
-  size_t b = 5;
-  pbbs::sequence<uintE> x = s.rslice(a,b);
-
-  cout << "A: " << a << endl;
-  cout << "B: " << b << endl;
-
-  for (int i = 0; i < x.size(); i++) {
-    cout << x[i] << endl;
-  }
-
-}
-*/
 /*
 int main() {
-
-  // TODO: use integrated ligra main
   // e.g.,
   //template <class Graph>r
   //double AppKCore_runner(Graph& GA, commandLine P) {
@@ -102,8 +80,21 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   //-rounds 1 to run once
 
-  HSet<Graph> h = HSet<Graph>(GA);
   
+  //HSet<Graph> h = HSet<Graph>(GA);
+  //auto _G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
+  HSet<Graph> h = HSet<Graph>(GA);
+  //Weird size change in number of vertices in graph
+  cout << h.G->n << endl;
+  cout << h.G->n << endl;
+
+  //Reassigning fixes previous error
+  //auto dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA);
+  //h.G = &dynG;
+
+  std::cout << "HINDEX: " << h.hindex << endl;
+  std::cout << "B SIZE: " << h.B.size() << endl;
+  /*
   auto batch1 = pbbs::sequence<uintE>(1);
   batch1[0] = 4;
 
@@ -113,44 +104,28 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   auto batch3 = pbbs::sequence<uintE>(1);
   batch3[0] = 0;
-
-  auto batch4 = pbbs::sequence<uintE>(3);
-  batch4[0] = 1;
-  batch4[1] = 5;
-  batch4[2] = 0;
   
   h.insert(batch1); //1 vertex with deg 1
   std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "B SIZE: " << h.B.size() << endl;
 
   h.insert(batch3); //1 vertex with deg 3
   std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "B SIZE: " << h.B.size() << endl;
 
   h.insert(batch2); //2 vertices with deg 2
   std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "B SIZE: " << h.B.size() << endl;
   std::cout << "------------------------------------------" << endl;
 
-  std::tuple<bool, sparse_table<uintE, pbbs::empty, hash_uintE>> info = h.containedInH(0);
-  sparse_table<uintE, pbbs::empty, hash_uintE> H = std::get<1>(info);
-  std::cout << "Contains Vertex 0: " << std::get<0>(info) << endl;
-  pbbs::sequence<std::tuple<uintE, pbbs::empty>> flatten = H.entries();
-
-  std::cout << "SIZE OF H: " << flatten.size() << endl;
-  for (int i = 0; i < flatten.size(); i++) {
-    cout << std::get<0>(flatten[i]) << endl;
-  }
-
-  cout << "------------------------------------------" << endl;
   h.erase(batch3); //removes 1 vertex with deg 3
   std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
+  std::cout << "B SIZE: " << h.B.size() << endl;
 
-  h.erase(batch2); //removes deg 2 and deg 3
+  h.erase(batch2); //removes 2 vertex with degree 2
   std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
-  
+  std::cout << "B SIZE: " << h.B.size() << endl;
+  */
   /*
   auto batch = pbbs::sequence<uintE>(6);
   par_for(0, 6, [&] (size_t i) {
@@ -160,19 +135,7 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   h.insert(batch);
   std::cout << "HINDEX: " << h.hindex << endl;
   std::cout << "B SIZE: " << h.B << endl;
-  std::cout << "------------------------------------------" << endl;
 
-  std::tuple<bool, sparse_table<uintE, pbbs::empty, hash_uintE>> info = h.containedInH(4);
-  sparse_table<uintE, pbbs::empty, hash_uintE> H = std::get<1>(info);
-  std::cout << "Contains Vertex 0: " << std::get<0>(info) << endl;
-  pbbs::sequence<std::tuple<uintE, pbbs::empty>> flatten = H.entries();
-
-  std::cout << "SIZE OF H: " << flatten.size() << endl;
-  for (int i = 0; i < flatten.size(); i++) {
-    std::cout << std::get<0>(flatten[i]) << endl;
-  }
-
-  cout << "------------------------------------------" << endl;
   h.erase(batch);
   std::cout << "HINDEX: " << h.hindex << endl;
   std::cout << "B SIZE: " << h.B << endl;
