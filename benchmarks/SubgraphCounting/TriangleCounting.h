@@ -13,13 +13,18 @@ struct hash_pair {
   inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) >> 32) * (pbbs::hash64(a.second) >> 32));}
 };
 
-pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> s) {
-
-  sequence<uintE> sizes = sequence<uintE>(s.size + 1,[&](size_t i) {if(i == s.size) {return (size_t)0;} return s.A[i].capacity;});
+pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> & s) {
+  sequence<uintE> sizes = sequence<uintE>(s.size + 1,[&](size_t i) {
+    if(i == s.size || !s.A[i].alloc) {
+      return (size_t)0;
+    }
+    return s.A[i].capacity;});
   pbbslib::scan_add_inplace(sizes);
 
   pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(sizes[sizes.size() - 1]);
+
   par_for(0,s.size,[&](size_t i) {
+    if(!s.A[i].alloc) return;
     par_for(0,(s.A[i]).size,[&](size_t j) {
       res.A[sizes[i] + j] = s.A[i].A[j];
     }); 
@@ -28,6 +33,20 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn
   return res;
 }
 
+pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<uintE,uintE>> & f,pbbslib::dyn_arr<std::pair<uintE,uintE>> & s) {
+
+  pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(f.size + s.size);
+  res.size = f.size + s.size;
+
+  par_for(0,res.size,[&](size_t i) {
+    if(i < f.size) {
+      res.A[i] = f.A[i];
+    }else{
+      res.A[i] = s.A[i - f.size];
+    }
+  });
+  return res;
+}
 
 void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size(),std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
@@ -37,7 +56,79 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
 
+  auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
+    return edges[i / 2].first;
+  }else{
+    return edges[i / 2].second;
+  }}),[&](uintE a,uintE b){return a > b;});
+
+  auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
+    if(i == 0) {
+      return aN[i];
+    }else{
+      if(aN[i] != aN[i - 1]) {
+        return aN[i];
+      }else{
+        return UINT_E_MAX;
+      }
+    }
+  });
+
+  allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
+
+
+  // Update H-Set first or work might become > h^2. 
+
+  // Find all the nodes that weren't in H-Set but now are. Also nodes that were in H-Set and now aren't
   dsg.batchAddEdges(edges);
+  sequence<uintE> originalH = hset.allH();
+  auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
+  // par_for(0,allNodes.size(),[&](size_t i) {cout << allNodes[i] << "   " << dsg.v_data.A[allNodes[i]].degree << endl;});
+
+  hset.modify(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);}));
+  
+  auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+
+  par_for(0,originalH.size(),[&](size_t i) {
+    originalHSet.insert(std::make_tuple(originalH[i],true));
+  });
+
+
+
+  // Wedges that need to be added due to being removed form HSet
+  pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> dW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
+  dW.size = 2 * edges.size();
+  par_for(0,originalH.size(),[&](size_t i) {
+    // If it was in H-Set but not anymore.
+    if(!hset.inH(originalH[i])) {
+      // Need to add wedges back
+      // I need to find the nodes not in special set first
+      auto es = dsg.v_data.A[originalH[i]].neighbors.entries();
+      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t i) {
+        if(allEdges.find(std::make_pair(originalH[i],std::get<0>(es[i])),false)) {
+          return UINT_E_MAX;
+        }
+        return std::get<0>(es[i]);
+      }),[&](uintE u) {return u != UINT_E_MAX;});
+      dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(specialSet.size() * (specialSet.size() - 1));
+      par_for(0,specialSet.size(),[&](size_t j) {
+        dW.A[i].size = specialSet.size() - 1;
+        par_for(0,specialSet.size(),[&](size_t k) {
+          if(k < j) {
+            dW.A[i].A[j * (specialSet.size() - 1) + k] = std::make_pair(specialSet[j],specialSet[k]);
+          }else if(k > j) {
+            dW.A[i].A[j * (specialSet.size() - 1) + k - 1] = std::make_pair(specialSet[j],specialSet[k]);
+          }
+        });
+      });
+    }else{
+      dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
+    }
+  });
+
+
+
+
 
 
   // triangles added by wedges (one added and two existing)
@@ -56,8 +147,12 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     uintE u = std::get<1>(edges[i]);
     uintE v = std::get<0>(edges[i]);
 
+    tW.A[2 * i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
+    tW.A[2 * i + 1] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
+
+
     wT.A[i] = wedges[v][u];
-    if(!hset.inH(v,dsg.v_data.A[v].degree)) {
+    if(!hset.inH(v)) {
       auto edgesV = dsg.v_data.A[v].neighbors.entries();
       // triangles added by two added and one existing
       pbbslib::dyn_arr<uintE> tTv = pbbslib::dyn_arr<uintE>(edgesV.size());
@@ -66,6 +161,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
       // newly formed wedges (one existing, one added)
       pbbslib::dyn_arr<std::pair<uintE,uintE>> tWv = pbbslib::dyn_arr<std::pair<uintE,uintE>>(2 * edgesV.size());
+
 
 
       par_for(0,edgesV.size(),[&](size_t i) {
@@ -107,7 +203,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       tT.A[i] = pbbs::reduce(tTv.to_seq(),pbbs::addm<uintE>());
     }
 
-    if(!hset.inH(u,dsg.v_data.A[u].degree)) {
+    if(!hset.inH(u)) {
       auto edgesU = dsg.v_data.A[u].neighbors.entries();
       // triangles added by two added and one existing
       pbbslib::dyn_arr<uintE> tTu = pbbslib::dyn_arr<uintE>(edgesU.size());
@@ -160,6 +256,8 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
+
+
   tW.size = tW.capacity;
 
   wT.size = wT.capacity;
@@ -169,8 +267,15 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   aT.size = aT.capacity;
   total += pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) / 6;
 
+
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalAdd = concatSeq(tW);
+  pbbslib::dyn_arr<std::pair<uintE,uintE>> fdW = concatSeq(dW);
+  finalAdd = concat2Seq(finalAdd,fdW);
   sequence<std::pair<uintE,uintE>> all = merge_sort(finalAdd.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
+  
+
+
+
   par_for(0,all.size(),[&](size_t i) {
     if(i != 0) {
       if(all[i] != all[i - 1]) {
@@ -179,6 +284,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
+
   par_for(0,all.size(),[&](size_t i) {
     if(i != 0) {
       if(all[i] != all[i - 1]) {
@@ -186,6 +292,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       }
     }
   });
+
   wedges[all[all.size() - 1].first][all[all.size() - 1].second] += all.size();
 
 }
