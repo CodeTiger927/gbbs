@@ -45,7 +45,7 @@ struct dynamic_symmetric_vertex {
   edges_type* neighbors = nullptr;
 
   dynamic_symmetric_vertex(dynamic_vertex_data& vdata) {
-    neighbors = vdata.neighbors;
+    neighbors = &vdata.neighbors;
     degree = vdata.degree;
   }
 
@@ -342,14 +342,13 @@ dynamic_symmetric_graph<dynamic_symmetric_vertex,W> createEmptyDynamicSymmetricG
 }
 
 // Creates a dynamic symmetric graph based on another graph
-template <template <class W> class vertex_type, class W>
-dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(symmetric_graph<symmetric_vertex,pbbs::empty> G) {
+template <template <class W> class vertex_type, class W, class Graph>
+dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(Graph G) {
 
   dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dsg = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex,W>();
 
   pbbs::sequence<uintE> v = pbbs::sequence<uintE>(G.n,[&](size_t i){return i;});
   dsg.batchAddVertices(v);
-
   for(int i = 0;i < G.n;i++) {
     pbbs::sequence<uintE> s = pbbs::sequence<uintE>(G.get_vertex(i).degree,[&](size_t j){return G.get_vertex(i).getOutNeighbor(j);});
     dsg.batchAddEdges(i,s);
