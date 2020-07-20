@@ -1,5 +1,6 @@
 #include "h-index.h"
 #include <iostream>
+#include "ligra/pbbslib/dyn_arr.h"
 
 /*
 int main() {
@@ -76,71 +77,99 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   // Then, assume we have some array that denotes batch edge insertions/deletions
   // In a serial for loop, process these batch updates, dynamically, including graph updates + h-index updates
 
-  //EXAMPLE: ./h-index -s -rounds 1 "graph_test.txt"
+  //EXAMPLE: ./h-index -s -rounds 1 "graph_test_3.txt"
 
   //-rounds 1 to run once
 
+  //------------------INITIALIZATION------------------//
+  std::cout << "\n-----INIT GRAPH-----" << endl;
+  auto _dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA); //Dynamify inside main
+  HSet<Graph> h = HSet<Graph>(&_dynG);
+
+  pbbs::sequence<uintE> vBatch = pbbs::sequence<uintE>(0); //General batch for vertices
+  pbbs::sequence<std::pair<uintE, uintE>> eBatch = pbbs::sequence<std::pair<uintE, uintE>>(0); //General batch for edges
+
+  std::cout << "h-index: " << h.hindex << endl; //|H| = 2
+  std::cout << "B size: " << h.B.size() << endl; //|B| = 1
+
+
+
+  //------------------CHANGE 1------------------//
+  std::cout << "\n-----CHANGE 1-----" << endl;
+
+  //Remove from HSet vertices that will be changed
+  vBatch = pbbs::sequence<uintE>(2); //Temporarily removes vertices 1 and 3
+  vBatch[0] = 1; vBatch[1] = 3;
+  h.erase(vBatch); 
+
+  //Add new vertices to graph
+  vBatch = pbbs::sequence<uintE>(2); //Adds vertices 4 and 5 to graph
+  vBatch[0] = 4; vBatch[1] = 5;
+  h.G->batchAddVertices(vBatch);
   
-  //HSet<Graph> h = HSet<Graph>(GA);
-  //auto _G = gbbs_io::read_unweighted_symmetric_graph("graph_test.txt", false);
-  HSet<Graph> h = HSet<Graph>(GA);
-  //Weird size change in number of vertices in graph
-  cout << h.G->n << endl;
-  cout << h.G->n << endl;
+  //Add new edges to graph
+  eBatch = pbbs::sequence<std::pair<uintE, uintE>>(3); //Adds 1--3, 1--4, 3--5
+  eBatch[0] = std::make_pair(1, 3); eBatch[1] = std::make_pair(1, 4); eBatch[2] = std::make_pair(3, 5);
+  h.G->batchAddEdges(eBatch);
 
-  //Reassigning fixes previous error
-  //auto dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA);
-  //h.G = &dynG;
+  //Add vertices to HSet
+  vBatch = pbbs::sequence<uintE>(4); //Adds 4 and 5; Re-adds 1 and 3
+  vBatch[0] = 1; vBatch[1] = 3; vBatch[2] = 4; vBatch[3] = 5; 
+  h.insert(vBatch);
 
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
-  /*
-  auto batch1 = pbbs::sequence<uintE>(1);
-  batch1[0] = 4;
+  std::cout << "h-index: " << h.hindex << endl; //|H| = 3
+  std::cout << "B size: " << h.B.size() << endl; //|B| = 2
 
-  auto batch2 = pbbs::sequence<uintE>(2);
-  batch2[0] = 1;
-  batch2[1] = 5;
 
-  auto batch3 = pbbs::sequence<uintE>(1);
-  batch3[0] = 0;
+  //------------------CHANGE 2------------------//
+  std::cout << "\n-----CHANGE 2-----" << endl;
   
-  h.insert(batch1); //1 vertex with deg 1
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
+  //Remove vertices from HSet
+  vBatch = pbbs::sequence<uintE>(5); //Temporarily remove 0, 2, 4, 5; permanently removes 3
+  vBatch[0] = 0; vBatch[1] = 2; vBatch[2] = 3; vBatch[3] = 4; vBatch[4] = 5;
+  h.erase(vBatch);
 
-  h.insert(batch3); //1 vertex with deg 3
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
+  
+  //Removes edges from graph
+  eBatch = pbbs::sequence<std::pair<uintE, uintE>>(3); //Removes 1--3, 2--3, 3--5
+  eBatch[0] = std::make_pair(1, 3); eBatch[1] = std::make_pair(2, 3); eBatch[2] = std::make_pair(3, 5);
+  h.G->batchRemoveEdges(eBatch);
 
-  h.insert(batch2); //2 vertices with deg 2
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
-  std::cout << "------------------------------------------" << endl;
+  //Remove vertices from graph
+  vBatch = pbbs::sequence<uintE>(1); //Removes vertex 3
+  vBatch[0] = 3;
+  h.G->batchRemoveVertices(vBatch);
 
-  h.erase(batch3); //removes 1 vertex with deg 3
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
 
-  h.erase(batch2); //removes 2 vertex with degree 2
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B.size() << endl;
-  */
-  /*
-  auto batch = pbbs::sequence<uintE>(6);
-  par_for(0, 6, [&] (size_t i) {
-    batch[i] = i;
-  });
+  //Add new edges to graph
+  eBatch = pbbs::sequence<std::pair<uintE, uintE>>(3); //Adds edges 0--4, 2--4, 2--5, 4--5
+  eBatch[0] = std::make_pair(2, 4); eBatch[1] = std::make_pair(2, 5); 
+  eBatch[2] = std::make_pair(4, 5);
+  h.G->batchAddEdges(eBatch);
 
-  h.insert(batch);
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
 
-  h.erase(batch);
-  std::cout << "HINDEX: " << h.hindex << endl;
-  std::cout << "B SIZE: " << h.B << endl;
-  */
+  //Re-add changed vertices to HSet
+  vBatch = pbbs::sequence<uintE>(4);
+  vBatch[0] = 0; vBatch[1] = 2; vBatch[2] = 4; vBatch[3] = 5;
+  h.insert(vBatch);
+
+  std::cout << "h-index: " << h.hindex << endl; //|H| = 3
+  std::cout << "B size: " << h.B.size() << endl; //|B| = 1
+
+  //------------------CHANGE 3------------------//
+  std::cout << "\n-----CHANGE 3-----" << endl;
+
+  vBatch = pbbs::sequence<uintE>(5);
+  vBatch[0] = 0; vBatch[1] = 1; vBatch[2] = 2; vBatch[3] = 4; vBatch[4] = 5;
+  h.erase(vBatch);
+
+  h.G->batchRemoveVertices(vBatch);
+
+  std::cout << "h-index: " << h.hindex << endl; //|H| = 0
+  std::cout << "B size: " << h.B.size() << endl; //|B| = 0
+
   return 0;
 }
 
 generate_symmetric_main(AppHIndex_runner, false);
+

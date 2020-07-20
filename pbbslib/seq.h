@@ -225,6 +225,20 @@ namespace pbbs {
       n += a.size();
     }
 
+    //NEW Function
+    //Extends size by ns (new size = current size + ns)
+    void resize(size_t nn, T fill) {
+      auto ns = pbbs::new_array_no_init<T>(nn);
+      parallel_for(0, n + nn, [&] (size_t i) {
+        ns[i] = i < n ? s[i] : fill;
+      });
+
+      pbbs::delete_array<T>(s, n);
+
+      s = ns;      
+      n += nn;
+    }
+
 
   private:
     template <class Seq>
