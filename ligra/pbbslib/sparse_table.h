@@ -264,9 +264,18 @@ class sparse_table {
   }
 
   void erase(K k) { // Assumes that k is in sparse_table
-    
-    size_t index = idx(k);
-    table[index] = empty;
+    size_t h = firstIndex(k);
+    while (true) {
+      if (std::get<0>(table[h]) == k) {
+        if (pbbslib::CAS(&std::get<0>(table[h]), k, empty_key)) {
+          std::get<1>(table[h]) = std::get<1>(empty);
+          
+          return;
+        }
+      }
+      h = incrementIndex(h);
+    }
+    return;
   }
 
 
