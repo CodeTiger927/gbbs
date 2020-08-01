@@ -100,12 +100,15 @@ struct HSetAlex {
 	}
 
 	void remove(sequence<uintE> s) {
+
 		n -= s.size();
 		sequence<uintE> all = merge_sort(s,[&](uintE a,uintE b) {return vertices.A[a] < vertices.A[b];});
 		long long curN = HIndex - BSize + cN.A[HIndex];
     	par_for(0,s.size(),[&](size_t i) {
 			C.A[vertices.A[s[i]]].erase(s[i]);
 		});
+
+
 
     	auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,all.size(),1,[&](size_t i) {
@@ -116,6 +119,7 @@ struct HSetAlex {
 				}
 			}
 		});
+
 
 
 		start.insert(std::make_tuple(vertices.A[all[0]],0));
@@ -136,12 +140,10 @@ struct HSetAlex {
       	});
 
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
-			long long cur = HIndex - i;
+			long long cur = HIndex - i - 1;
 			if(cur < 0) return (uintE)0;
 			return cN.A[cur];
 		});
-
-
 
 		pbbslib::scan_add_inplace(cNs);
 		sequence<uintE> worksOrNo = sequence<uintE>(cNs.size() + 1,[&](size_t i) {
@@ -153,21 +155,31 @@ struct HSetAlex {
 		});
 
 		uintE NHIndex = pbbs::reduce(worksOrNo,pbbs::maxm<uintE>());
-		if(NHIndex == HIndex) return;
-		auto allH = C.A[HIndex].entries();
-		BSize = NHIndex - (curN - cNs[HIndex - NHIndex + 1]);
+
+
+		BSize = cN.A[NHIndex] - (curN + cNs[HIndex - NHIndex] - NHIndex);
+
+
+
+
+		auto allH = C.A[NHIndex].entries();		
+
 		B = make_sparse_table(std::max(BSize,(uintE)SIZE_OF_GRAPH),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+
 		par_for(0,BSize,[&](size_t i) {
 			B.insert(allH[i]);
 		});
+
 
 		HIndex = NHIndex;
 	}
 
 	void insert(sequence<std::pair<uintE,uintE>> s) {
+
 		n += s.size();
     	sequence<std::pair<uintE,uintE>> all = merge_sort(s,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
 		long long curN = HIndex - BSize + cN.A[HIndex];
+
     	auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,s.size(),1,[&](size_t i) {
 			vertices.A[s[i].first] = s[i].second;
@@ -202,7 +214,9 @@ struct HSetAlex {
 		});
 
 
+
 		pbbslib::scan_add_inplace(cNs);
+
 
 		sequence<uintE> worksOrNo = sequence<uintE>(cNs.size(),[&](size_t i) {
 			if(curN - cNs[i] >= HIndex + i) {

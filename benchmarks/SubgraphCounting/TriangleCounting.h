@@ -10,7 +10,7 @@ uintE total = 0;
 auto seq2da = [&](sequence<std::pair<uintE,uintE>> s) -> pbbslib::dyn_arr<std::pair<uintE,uintE>> {pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size()); par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];}); res.size = s.size(); return res;};
 
 struct hash_pair {
-  inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) >> 32) * (pbbs::hash64(a.second) >> 32));}
+  inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) * 3) ^ (pbbs::hash64(a.second) >> 32));}
 };
 
 
@@ -48,11 +48,12 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<u
 }
 
 void addEdges(sequence<std::pair<uintE,uintE>> edges) {
-  auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size(),std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
+  auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
   par_for(0,edges.size(),[&](size_t i) {
     allEdges.insert(std::make_tuple(edges[i],true));
     allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
   });
+
 
 
   auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
@@ -60,6 +61,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   }else{
     return edges[i / 2].second;
   }}),[&](uintE a,uintE b){return a > b;});
+
 
   auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
     if(i == 0) {
@@ -79,8 +81,11 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   // Update H-Set first or work might become > h^2. 
 
   // Find all the nodes that weren't in H-Set but now are. Also nodes that were in H-Set and now aren't
+  
   dsg.batchAddEdges(edges);
+
   sequence<uintE> originalH = hset.allH();
+
 
   auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
   // par_for(0,allNodes.size(),[&](size_t i) {cout << allNodes[i] << "   " << dsg.v_data.A[allNodes[i]].degree << endl;});
@@ -89,12 +94,11 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
   sequence<uintE> hs = hset.allH();
 
-  auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+  auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
   par_for(0,originalH.size(),[&](size_t i) {
     originalHSet.insert(std::make_tuple(originalH[i],true));
   });
-
 
 
   // Wedges that need to be added due to being removed form HSet
@@ -106,19 +110,21 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       // Need to add wedges back
       // I need to find the nodes not in special set first
       auto es = dsg.v_data.A[originalH[i]].neighbors.entries();
-      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t i) {
-        if(allEdges.find(std::make_pair(originalH[i],std::get<0>(es[i])),false)) {
+      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t j) {
+        if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(originalH[i],std::get<0>(es[j])),false)) {
           return UINT_E_MAX;
         }
-        return std::get<0>(es[i]);
+        return std::get<0>(es[j]);
       }),[&](uintE u) {return u != UINT_E_MAX;});
       dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(specialSet.size() * (specialSet.size() - 1));
       par_for(0,specialSet.size(),[&](size_t j) {
-        dW.A[i].size = specialSet.size() - 1;
+        dW.A[i].size = specialSet.size() * (specialSet.size() - 1);
         par_for(0,specialSet.size(),[&](size_t k) {
           if(k < j) {
+            // cout << specialSet[j] << " " << specialSet[k] << endl;
             dW.A[i].A[j * (specialSet.size() - 1) + k] = std::make_pair(specialSet[j],specialSet[k]);
           }else if(k > j) {
+            // cout << specialSet[j] << " " << specialSet[k] << endl;
             dW.A[i].A[j * (specialSet.size() - 1) + k - 1] = std::make_pair(specialSet[j],specialSet[k]);
           }
         });
@@ -127,6 +133,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
     }
   });
+
 
 
   // Wedges that need to be removed due to being added to HSet
@@ -138,15 +145,17 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       // Need to remove the wedges
       // I need to find the nodes not in special set first
       auto es = dsg.v_data.A[hs[i]].neighbors.entries();
-      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t i) {
-        if(allEdges.find(std::make_pair(hs[i],std::get<0>(es[i])),false)) {
+      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t j) {
+        if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(hs[i],std::get<0>(es[j])),false)) {
           return UINT_E_MAX;
         }
-        return std::get<0>(es[i]);
+        return std::get<0>(es[j]);
       }),[&](uintE u) {return u != UINT_E_MAX;});
+
+
       rW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(specialSet.size() * (specialSet.size() - 1));
       par_for(0,specialSet.size(),[&](size_t j) {
-        rW.A[i].size = specialSet.size() - 1;
+        rW.A[i].size = specialSet.size() * (specialSet.size() - 1);
         par_for(0,specialSet.size(),[&](size_t k) {
           if(k < j) {
             rW.A[i].A[j * (specialSet.size() - 1) + k] = std::make_pair(specialSet[j],specialSet[k]);
@@ -159,6 +168,8 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       rW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
     }
   });
+
+
 
 
 
@@ -175,7 +186,6 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
   // newly formed wedges
   pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> tW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
-
 
   par_for(0,edges.size(),[&](size_t i) {
     uintE u = std::get<1>(edges[i]);
@@ -275,7 +285,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
           tWu.A[2 * i + 1] = std::make_pair(next,v);
         }
 
-        if(dsg.existEdge(v,next) && dsg.existEdge(next,u)) {
+        if(dsg.existEdge(next,u)) {
           // A triangle!
           if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(std::make_pair(u,next),false))) {
             // (u,v) and (v,next) are added edges but not (next,u).
@@ -312,8 +322,12 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       tW.A[2 * i + 1] = seq2da(filter(tWu.to_seq(),[&](std::pair<uintE,uintE> cur) {if((cur.first) == UINT_E_MAX && (cur.second) == UINT_E_MAX) {return false;} return true;}));
       aTu.size = aTu.capacity;
       aT.A[i] += pbbs::reduce(aTu.to_seq(),pbbs::addm<uintE>());
+
     }
   });
+
+
+
 
 
   // triangles formed with h-set
@@ -370,11 +384,6 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
   sequence<std::pair<uintE,uintE>> all = merge_sort(finalAdd.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
   
-  // cout << "haha" << endl;
-  // for(int i = 0;i < all.size();++i) {
-  //   cout << all[i].first << " " << all[i].second << endl;
-  // }
-
 
   par_for(0,all.size(),[&](size_t i) {
     if(i != 0) {
@@ -392,20 +401,11 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
-
-
-  wedges[all[all.size() - 1].first][all[all.size() - 1].second] += all.size();
-
-  cout << "hhaha " << wedges[3][6] << endl;
+ if(all.size() != 0) wedges[all[all.size() - 1].first][all[all.size() - 1].second] += all.size();
 
 
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalRemove = concatSeq(rW);
   sequence<std::pair<uintE,uintE>> allR = merge_sort(finalRemove.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
-
-  cout  << "hehe " << allR.size() << endl;
-  for(int i = 0;i < allR.size();++i) {
-    cout << allR[i].first << " " << allR[i].second << endl;
-  }
 
   par_for(0,allR.size(),[&](size_t i) {
     if(i != 0) {
@@ -422,19 +422,18 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       }
     }
   });
-  wedges[allR[allR.size() - 1].first][allR[allR.size() - 1].second] -= allR.size();
+  if(allR.size() != 0) wedges[allR[allR.size() - 1].first][allR[allR.size() - 1].second] -= allR.size();
 
 }
 
 void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
-  auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size(),std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
+  auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
   par_for(0,edges.size(),[&](size_t i) {
     allEdges.insert(std::make_tuple(edges[i],true));
     allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
   });
 
   sequence<uintE> originalH = hset.allH();
-
 
   // triangles removed by wedges
   pbbslib::dyn_arr<uintE> wT = pbbslib::dyn_arr<uintE>(edges.size());
@@ -521,6 +520,8 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       aT.A[i] = pbbs::reduce(aTv.to_seq(),pbbs::addm<uintE>());
     }
 
+
+
     if(!hset.inH(u)) {
       auto edgesU = dsg.v_data.A[u].neighbors.entries();
 
@@ -588,6 +589,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
 
+
   // triangles removed with h-set
   pbbslib::dyn_arr<long long> hT = pbbslib::dyn_arr<long long>(edges.size());
   par_for(0,edges.size(),[&](size_t i) {
@@ -631,7 +633,6 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   hT.size = hT.capacity;
   total += pbbs::reduce(hT.to_seq(),pbbs::addm<long long>()) / 6;
 
-
   auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
     return edges[i / 2].first;
   }else{
@@ -651,8 +652,9 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
   allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
-
+  
   dsg.batchRemoveEdges(edges);
+
 
   auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
   // par_for(0,allNodes.size(),[&](size_t i) {cout << allNodes[i] << "   " << dsg.v_data.A[allNodes[i]].degree << endl;});
@@ -661,7 +663,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
 
   sequence<uintE> hs = hset.allH();
 
-  auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+  auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
   par_for(0,originalH.size(),[&](size_t i) {
     originalHSet.insert(std::make_tuple(originalH[i],true));
@@ -677,15 +679,15 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       // Need to add wedges back
       // I need to find the nodes not in special set first
       auto es = dsg.v_data.A[originalH[i]].neighbors.entries();
-      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t i) {
-        if(allEdges.find(std::make_pair(originalH[i],std::get<0>(es[i])),false)) {
+      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t j) {
+        if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(originalH[i],std::get<0>(es[j])),false)) {
           return UINT_E_MAX;
         }
-        return std::get<0>(es[i]);
+        return std::get<0>(es[j]);
       }),[&](uintE u) {return u != UINT_E_MAX;});
       dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(specialSet.size() * (specialSet.size() - 1));
       par_for(0,specialSet.size(),[&](size_t j) {
-        dW.A[i].size = specialSet.size() - 1;
+        dW.A[i].size = specialSet.size() * (specialSet.size() - 1);
         par_for(0,specialSet.size(),[&](size_t k) {
           if(k < j) {
             dW.A[i].A[j * (specialSet.size() - 1) + k] = std::make_pair(specialSet[j],specialSet[k]);
@@ -709,15 +711,15 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       // Need to remove the wedges
       // I need to find the nodes not in special set first
       auto es = dsg.v_data.A[hs[i]].neighbors.entries();
-      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t i) {
-        if(allEdges.find(std::make_pair(hs[i],std::get<0>(es[i])),false)) {
+      sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t j) {
+        if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(hs[i],std::get<0>(es[j])),false)) {
           return UINT_E_MAX;
         }
-        return std::get<0>(es[i]);
+        return std::get<0>(es[j]);
       }),[&](uintE u) {return u != UINT_E_MAX;});
       rW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(specialSet.size() * (specialSet.size() - 1));
       par_for(0,specialSet.size(),[&](size_t j) {
-        rW.A[i].size = specialSet.size() - 1;
+        rW.A[i].size = specialSet.size() * (specialSet.size() - 1);
         par_for(0,specialSet.size(),[&](size_t k) {
           if(k < j) {
             rW.A[i].A[j * (specialSet.size() - 1) + k] = std::make_pair(specialSet[j],specialSet[k]);
@@ -754,7 +756,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
-  wedges[all[all.size() - 1].first][all[all.size() - 1].second] += all.size();
+  if(all.size() != 0) wedges[all[all.size() - 1].first][all[all.size() - 1].second] += all.size();
 
   pbbslib::dyn_arr<std::pair<uintE,uintE>> frW = concatSeq(rW);
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalRemove = concatSeq(tW);
@@ -778,7 +780,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
-  wedges[allR[allR.size() - 1].first][allR[allR.size() - 1].second] -= allR.size();
+  if(allR.size() != 0) wedges[allR[allR.size() - 1].first][allR[allR.size() - 1].second] -= allR.size();
 
 }
 
