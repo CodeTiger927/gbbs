@@ -130,10 +130,11 @@ class sparse_table {
     K k = std::get<0>(kv);
     size_t h = firstIndex(k);
     while (true) {
+
       if (std::get<0>(table[h]) == empty_key) {
         if (pbbslib::CAS(&std::get<0>(table[h]), empty_key, k)) {
           std::get<1>(table[h]) = std::get<1>(kv);
-          
+
           return true;
         }
       }
@@ -248,11 +249,11 @@ class sparse_table {
   }
 
   //NEW
-  bool change(K k, V val) {
+  bool change(K k, V oldVal, V val) {
     size_t h = firstIndex(k);
     while (true) {
       if (std::get<0>(table[h]) == k) {
-        if (pbbslib::CAS(&std::get<1>(table[h]), std::get<1>(table[h]), val)) {
+        if (pbbslib::CAS(&std::get<1>(table[h]), oldVal, val)) {
           return true;
         }
         return false;
@@ -261,12 +262,6 @@ class sparse_table {
       h = incrementIndex(h);
     }
     return false;
-  }
-
-  void erase(K k) { // Assumes that k is in sparse_table
-    
-    size_t index = idx(k);
-    table[index] = empty;
   }
 
 

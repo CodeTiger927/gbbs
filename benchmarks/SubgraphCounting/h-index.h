@@ -1,7 +1,3 @@
-//- Return an iterator of H
-//  - Return a lambda
-//  - An array as a function
-
 #include <iostream>
 #include <map>
 #include <set>
@@ -14,21 +10,26 @@
 #include "ligra/pbbslib/dyn_arr.h"
 #include "pbbslib/sequence.h"
 
+
+size_t INIT_DEG_SIZE = 4;
+
 template <class Graph>
 struct HSet {
 
   //Graph* G; //Graph
   dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* G;
 
-  sparse_table<uintE, pbbs::empty, hash_uintE> H; //Set of elements such that deg(x) >= |H|
   size_t hindex; //|H|
 
   //sparse_table<uintE, pbbs::empty, hash_uintE> P;
 
-  //uintE bSize; //Number of elements in B
-  pbbs::sequence<uintE> B;
+  uintE bSize; //Number of elements in B
+  //Can access B by finding first bSize elements inside C
 
-  pbbs::sequence<pbbs::sequence<uintE>*> C; //Map of elements not in H fed by degree up to a threshold
+  //Switch to dyn_arr
+  //Store loose upper bound
+
+  pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C; //Map of elements not in H fed by degree up to a threshold
 
 
   //Constructor
@@ -36,14 +37,12 @@ struct HSet {
   HSet(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) {
     G = _G;
     
-    H = make_sparse_table<uintE, pbbs::empty, hash_uintE> //|H| has to be between m/n and sqrt(2m)
-      (std::max(G->m/G->n, (size_t) sqrt(2 * G->m)), std::make_tuple(UINT_E_MAX, pbbs::empty()), hash_uintE());
     hindex = 0;
 
-    B = pbbs::sequence<uintE>(0);
+    bSize = 0;
 
-    C = pbbs::sequence<pbbs::sequence<uintE>*>(G->n);
-    par_for(0, C.size(), [&] (size_t i) { C[i] = new sequence<uintE>(0); });
+    C = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(100); //FIX LATER
+    par_for(0, C.capacity, [&] (size_t i) { C.A[i] = nullptr; });
 
     //Add all starting graph elements into HSet
     auto start = pbbs::sequence<uintE>(G->n);
@@ -74,35 +73,34 @@ struct HSet {
     });
 
     //Adds additional space to C if it is too small
-    if (sortedBatch.size() >= C.size()) { //deg[0] is the largest degree
-      
-      size_t cOldSize = C.size();
-
-      //Double it or increase to the size of batch (no errors when slicing)
-      C.resize(std::max(C.size(), sortedBatch.size() - C.size()), nullptr);
-      par_for(cOldSize, C.size(), [&] (size_t i) { 
-        C[i] = new sequence<uintE>(0); 
-      });
-    }
-    
     
     //--------------------------Compute H-index--------------------------//
     pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(sortedBatch.size());
 
     par_for(0, sortedBatch.size(), [&] (size_t i) {
-      sum[i] = C[hindex + i + 1]->size();
+      if (hindex + i + 1 < C.capacity && C.A[hindex + i + 1] != nullptr) {
+        sum[i] = C.A[hindex + i + 1]->size;
+      }
+      else {
+        sum[i] = 0;
+      }
     });
 
     //Computes Prefix Sum (note scan_add_inplace is exclusive)
     pbbslib::scan_add_inplace(sum);
     par_for(0, sum.size(), [&] (size_t i) {
-      sum[i] += C[hindex + i + 1]->size() + B.size(); //Compute inclusive sunm
+      if (hindex + i + 1 < C.capacity && C.A[hindex + i + 1] != nullptr) {
+        sum[i] += C.A[hindex + i + 1]->size + bSize; //Compute inclusive sum
+      }
+      else {
+        sum[i] += bSize;
+      }
     });
 
     //Creates the binary array described as M
     pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size() + 1);
-    if (B.size() < deg.size()) {
-      M[0] = (deg[B.size()] > hindex);
+    if (bSize < deg.size()) {
+      M[0] = (deg[bSize] > hindex);
     }
     else {
       M[0] = false;
@@ -130,10 +128,23 @@ struct HSet {
       hindexIncrease = sortedBatch.size();
     }
     //Update B
-    uintE greaterThanH = hindex + (C[hindex]->size() - B.size()); //Number of vertices greater than hindex
+
+    uintE greaterThanH;
+    if (C.A[hindex] != nullptr) {
+      greaterThanH = hindex + (C.A[hindex]->size - bSize); //Number of vertices greater than hindex
+    }
+    else {
+      greaterThanH = hindex + (0 - bSize);
+    }
+    
     pbbs::sequence<uintE> sizesBetweenH = pbbs::sequence<uintE>(hindexIncrease); //Sizes of each entry in C that is between old hindex
     par_for(0, hindexIncrease, [&] (size_t i) {
-      sizesBetweenH[i] = C[hindex + i]->size();
+      if (hindex + i < C.capacity && C.A[hindex + i] != nullptr) {
+        sizesBetweenH[i] = C.A[hindex + i]->size; 
+      }
+      else {
+        sizesBetweenH[i] = 0;
+      }
     });
     uintE betweenH = pbbslib::reduce_add(sizesBetweenH); //Number of vertices between old hindex and (new hindex - 1)
     uintE aboveNewH = greaterThanH - betweenH;
@@ -145,8 +156,13 @@ struct HSet {
     addToC(sortedBatch, deg);
     hindex += hindexIncrease;
     //Update C, hindexIncrease);
-    uintE bSize = C[hindex]->size() - ((aboveNewH + added) - hindex); //Number of vertices not in B is equal to the number of vertices greater than hindex minus hindex
-    B = C[hindex]->slice(0, bSize);
+    if (C.A[hindex] != nullptr) {
+      //Number of vertices not in B is equal to the number of vertices greater than hindex minus hindex
+      bSize = C.A[hindex]->size - ((aboveNewH + added) - hindex); 
+    }
+    else {
+      bSize = -((aboveNewH + added) - hindex);
+    }
     //Slight variation to hindex paper - C will store all vertices (instead of the vertices not in B)
 
     deg.clear();
@@ -179,11 +195,22 @@ struct HSet {
     //--------------------------Updating Variables--------------------------//
 
     //Set up things to find new B
-    uintE greaterThanH = hindex + (C[hindex]->size() - B.size()); //Number of vertices greater than hindex
+    uintE greaterThanH;
+    if (C.A[hindex] != nullptr) {
+      greaterThanH = hindex + (C.A[hindex]->size - bSize); //Number of vertices greater than hindex
+    }
+    else {
+      greaterThanH = hindex + (0 - bSize);
+    }
 
     pbbs::sequence<uintE> sizesBetweenH = pbbs::sequence<uintE>(std::min(sortedBatch.size(), hindex)); //Sizes of each entry in C that is between old hindex
     par_for(0, sizesBetweenH.size(), [&] (size_t i) {
-      sizesBetweenH[i] = C[hindex - i - 1]->size();
+      if (C.A[hindex - i - 1] != nullptr) {
+        sizesBetweenH[i] = C.A[hindex - i - 1]->size;
+      }
+      else {
+        sizesBetweenH[i] = 0;
+      }
     });
 
     //Number of elements in H that were removed
@@ -193,42 +220,37 @@ struct HSet {
 
     uintE stillAboveH = greaterThanH - removed;
 
-
     //Update C
     removeFromC(sortedBatch, deg);
-    //Update Current B
-    auto remove = [&] (uintE element) {
-      for (size_t i = 0; i < sortedBatch.size(); i++) {
-        if (element == sortedBatch[i]) return false;
-      }
-      return true;
-    };
-
-    //Copies a lot which might be bad
-    //Could also modify filter to return pointer
-    auto filtered = pbbs::filter(B, remove);
-    B.clear();
-    B = pbbs::sequence<uintE>(filtered);
-    filtered.clear();
 
 
     //--------------------------Compute H-index--------------------------//
     pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(std::min(sortedBatch.size(), hindex)).rslice();
     
     par_for(0, sum.size(), [&] (size_t i) {
-      sum[i] = C[hindex - i - 1]->size();
+      if (C.A[hindex - i - 1] != nullptr) {
+        sum[i] = C.A[hindex - i - 1]->size;
+      }
+      else {
+        sum[i] = 0;
+      }
     });
 
     //Computes Prefix Sum (note scan_add_inplace is exclusive)
     pbbslib::scan_add_inplace(sum);
     par_for(0, sum.size(), [&] (size_t i) {
-      sum[i] += C[hindex - i]->size(); //Compute inclusive sunm
+      if (hindex - i - 1 >= 0 && C.A[hindex - i - 1] != nullptr) {
+        sum[i] += C.A[hindex - i - 1]->size; //Compute inclusive sum
+      }
+      else {
+        sum[i] += 0;
+      }
     });
 
     pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size() + 1);
 
     M[0] = (stillAboveH < hindex);
-    par_for(1, sum.size(), [&] (size_t i) {
+    par_for(1, M.size(), [&] (size_t i) {
       M[i] = (sum[i - 1] + stillAboveH < hindex - i);
     });
     sum.clear();
@@ -263,8 +285,12 @@ struct HSet {
     hindex -= hindexDecrease;
 
     //Number of vertices not in B is equal to the number of vertices greater than hindex minus hindex
-    uintE bSize = C[hindex]->size() - ((aboveNewH - removedFromNewH) - hindex);
-    B = C[hindex]->slice(0, bSize);
+    if (C.A[hindex] != nullptr) {
+      bSize = C.A[hindex]->size - ((aboveNewH - removedFromNewH) - hindex);
+    }
+    else {
+      bSize = -((aboveNewH - removedFromNewH) - hindex);
+    }
 
     return hindex;
   }
@@ -281,15 +307,6 @@ struct HSet {
       difference[i] = (deg[i] != deg[i + 1]);  
     });
     */
-    if (deg[0] >= C.size()) {
-      size_t cOldSize = C.size();
-
-      //Double it or increase it up to the largest degree
-      C.resize(std::max(C.size(), deg[0] - C.size()), nullptr);
-      par_for(cOldSize, C.size(), [&] (size_t i) {
-        C[i] = new sequence<uintE>(0); 
-      });
-    }
 
     sequence<size_t> idx = pbbs::sequence<size_t>(batch.size());
 
@@ -308,7 +325,10 @@ struct HSet {
 
       pbbs::sequence<uintE> extra = batch.slice(start, end);
       
-      C[deg[indices[i]]]->append(extra);
+      if (C.A[deg[indices[i]]] == nullptr) {
+        C.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(INIT_DEG_SIZE);
+      }
+      C.A[deg[indices[i]]]->add(extra);
       extra.clear();
     });
     indices.clear();
@@ -348,26 +368,69 @@ struct HSet {
         return true;
       };
 
-      //Copies a lot which might be bad
-      //Could also modify filter to return pointer
-      auto filtered = pbbs::filter(*C[deg[indices[i]]], remove);
-      C[deg[indices[i]]]->clear();
-      C[deg[indices[i]]] = new pbbs::sequence<uintE>(filtered);
-      filtered.clear();
+      if (deg[indices[i]] != hindex) {
+        auto filtered = pbbs::new_array_no_init<uintE>(C.A[deg[indices[i]]]->capacity);
+        size_t removed = pbbslib::filter_seq(C.A[deg[indices[i]]]->A, filtered, C.A[deg[indices[i]]]->size, remove);
+        C.A[deg[indices[i]]]->del();
+        C.A[deg[indices[i]]]->A = filtered;
+        C.A[deg[indices[i]]]->size = removed;
+      }
+      else {
+        auto filtered = pbbs::new_array_no_init<uintE>(C.A[deg[indices[i]]]->capacity);
+
+        //Temporarily puts things into filtered (will be replaced in next line)
+        uintE removedFromB = pbbslib::filter_seq(C.A[deg[indices[i]]]->A, filtered, bSize, remove); 
+        size_t removed = pbbslib::filter_seq(&(C.A[deg[indices[i]]]->A)[bSize], &(filtered)[removedFromB], C.A[deg[indices[i]]]->size - bSize, remove);
+        C.A[deg[indices[i]]]->del();
+        C.A[deg[indices[i]]]->A = filtered;
+        C.A[deg[indices[i]]]->size = removed;
+
+        bSize = removedFromB;
+      }
+
+      if (C.A[deg[indices[i]]]->size == 0) {
+        C.A[deg[indices[i]]] = nullptr;
+      }
+
+      extra.clear();
     });
+
     indices.clear();
   }
-  
-  //Modifies the degree of existing vertices
-  //batch[i] = vertex id, degs[i] = vertex degree
-  //--------------------------CHANGE--------------------------//
-  uintE change(sequence<uintE> batch, sequence<uintE> degs) {
-    pbbs::sequence<uintE> sortedBatch = integer_sort(batch, [&] (uintE v) { return G->get_vertex(v).degree; }).rslice();
-    erase(sortedBatch, true);
-    //Change in graph using batch and degs
-    insert(sortedBatch, true);
 
-    return hindex;
+  uintE insertVertices(sequence<uintE> vertices) {
+    G->batchAddVertices(vertices);
+    return insert(vertices);
+  }
+
+  uintE eraseVertices(sequence<uintE> vertices) {
+    G->batchRemoveVertices(vertices);
+    return erase(vertices);
+  }
+  
+  //Insert edges once e.g. u--v inserts v--u as well
+  uintE insertEdges(sequence<std::pair<uintE, uintE>> edges) {
+    sequence<uintE> vertices = sequence<uintE>(2 * edges.size());
+    par_for(0, edges.size(), [&] (size_t i) {
+     vertices[2 * i] = edges[i].first;
+     vertices[(2 * i) + 1] = edges[i].second; 
+    });
+
+    erase(vertices);
+    G->batchAddEdges(edges);
+    return insert(vertices);
+  }
+
+  uintE eraseEdges(sequence<std::pair<uintE, uintE>> edges) {
+    sequence<uintE> vertices = sequence<uintE>(2 * edges.size());
+    par_for(0, edges.size(), [&] (size_t i) {
+      vertices[2 * i] = edges[i].first;
+      vertices[(2 * i) + 1] = edges[i].second;
+    });
+
+    erase(vertices);
+    G->batchRemoveEdges(edges);
+    return insert(vertices);
   }
 
   //Contains can just check the degree of a vertex and see if it is greater than |H|
@@ -377,8 +440,8 @@ struct HSet {
 
     if (deg > hindex) return true;
     else if (deg == hindex) {
-      for (size_t i = 0; i < B.size(); i++) {
-        if (B[i] == target) return true;
+      for (size_t i = 0; i < bSize; i++) {
+        if (C.A[hindex]->A[i] == target) return true;
       }
     }
     return false;
