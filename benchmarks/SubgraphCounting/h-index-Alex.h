@@ -22,6 +22,7 @@ struct HSetAlex {
 	uintE BSize;
 	pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>> C;
 	pbbslib::dyn_arr<uintE> cN;
+	pbbslib::dyn_arr<uintE> cStored;
 	pbbslib::dyn_arr<uintE> vertices;
 
 	// This can potentially be O(N), but I think normally it would be smaller than O(h) in actual practice
@@ -57,6 +58,8 @@ struct HSetAlex {
 		n = 0;
 		C = pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>>(0);
 		cN = pbbslib::dyn_arr<uintE>(0);
+		cStored = pbbslib::dyn_arr<uintE>(0);
+
 		vertices = pbbslib::dyn_arr<uintE>(0);
 		HIndex = 0;
 		BSize = 0;
@@ -88,16 +91,22 @@ struct HSetAlex {
 	  cN.A = nAAA;
 	  cN.capacity = nC;
 
+	  uintE* nAAAA = pbbslib::new_array_no_init<uintE>(nC);
+	  par_for(0,n,1,[&](size_t i){nAAAA[i] = cStored.A[i];});
+	  pbbslib::free_array(cStored.A);
+	  cStored.A = nAAAA;
+	  cStored.capacity = nC;
+
 	  n = amount;
    }
 
-	void resizeC(uintE v,uintE amount) {
-		amount = std::max(amount,(uintE)SIZE_OF_GRAPH);
-		if(amount != 0 && ceil(log2(amount)) == ceil(log2(C.A[v].m))) return;
+	void resizeC(uintE v) {
+		uintE amount = std::max(cStored.A[v],(uintE)SIZE_OF_GRAPH);
+		if((amount << 1) <= C.A[v].m && (amount << 2) >= C.A[v].m) return; 
 		auto entries = C.A[v].entries();
 
-		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-		par_for(0,entries.size(),1,[&](size_t i) {C.A[v].insert(entries[i]);});
+		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		par_for(0,entries.size(),1,[&](size_t i) {if(std::get<1>(entries[i])) C.A[v].insert(entries[i]);});
 	}
 
 	void remove(sequence<uintE> s) {
@@ -127,7 +136,7 @@ struct HSetAlex {
 		par_for(0,entries.size(),[&](size_t i) {
 			uintE cur = std::get<0>(entries[i]);
 			cN.A[cur] += std::get<1>(entries[i]);
-			resizeC(cur,cN.A[cur]);
+			resizeC(cur);
 		});
 
 
@@ -182,18 +191,21 @@ struct HSetAlex {
 				if(all[i].second != all[i - 1].second) {
 					start.insert(std::make_tuple(all[i].second,i));
 					cN.A[all[i - 1].second] += i;
+					cStored.A[all[i - 1].second] += i;
 				}
 			}
 		});
 
 		start.insert(std::make_tuple(all[0].second,0));
 		cN.A[all[all.size() - 1].second] += all.size();
+		cStored.A[all[all.size() - 1].second] += all.size();
 		auto entries = start.entries();
 
 		par_for(0,entries.size(),[&](size_t i) {
 			uintE cur = std::get<0>(entries[i]);
 			cN.A[std::get<0>(entries[i])] -= std::get<1>(entries[i]);
-			resizeC(std::get<0>(entries[i]),cN.A[cur]);
+			cStored.A[std::get<0>(entries[i])] -= std::get<1>(entries[i]);
+			resizeC(std::get<0>(entries[i]));
 		});
 
 		par_for(0,s.size(),[&](size_t i) {
