@@ -47,14 +47,21 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<u
   return res;
 }
 
+
+void initialize(size_t n) {
+  hset.resizeV(n);
+  sequence<uintE> nodes = sequence<uintE>(n,[&](size_t i) {return i;});
+  sequence<std::pair<uintE,uintE>> hPairs = sequence<std::pair<uintE,uintE>>(n,[&](size_t i) {return std::make_pair(i,0);});
+  dsg.batchAddVertices(nodes);
+  hset.insert(hPairs);
+}
+
 void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
   par_for(0,edges.size(),[&](size_t i) {
     allEdges.insert(std::make_tuple(edges[i],true));
     allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
   });
-
-
 
   auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
     return edges[i / 2].first;
@@ -652,9 +659,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
   allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
-  
   dsg.batchRemoveEdges(edges);
-
 
   auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
   // par_for(0,allNodes.size(),[&](size_t i) {cout << allNodes[i] << "   " << dsg.v_data.A[allNodes[i]].degree << endl;});
