@@ -9,7 +9,7 @@
 #include "ligra/pbbslib/dyn_arr.h"
 #include "pbbslib/sequence.h"
 
-const size_t SIZE_OF_GRAPH = 10;
+size_t SIZE_OF_GRAPH = 1005;
 
 struct HSetAlex {
 	HSetAlex() {
@@ -27,8 +27,10 @@ struct HSetAlex {
 
 	// This can potentially be O(N), but I think normally it would be smaller than O(h) in actual practice
 	sequence<uintE> allH() {
+
 		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * HIndex + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-		par_for(HIndex + 1,n,[&](size_t i) {
+		
+		par_for(HIndex + 1,550,[&](size_t i) {
 			if(cN.A[i] != 0) {
 				auto entries = C.A[i].entries();
 				par_for(0,entries.size(),100,[&](size_t j) {
@@ -37,8 +39,8 @@ struct HSetAlex {
 			}
 		});
 
-
 		auto b = B.entries();
+
 		par_for(0,b.size(),[&](size_t i) {
 			if(std::get<1>(b[i])) all.insert(std::make_tuple(std::get<0>(b[i]),true));
 		});
@@ -72,6 +74,7 @@ struct HSetAlex {
 	  if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
 		 return;
 	  }
+
 	  size_t nC = 1 << ((size_t)(ceil(log2(amount))));
 	  uintE* nA = pbbslib::new_array_no_init<uintE>(nC);
 	  par_for(0,n,1,[&](size_t i){nA[i] = vertices.A[i];});
@@ -79,32 +82,38 @@ struct HSetAlex {
 	  vertices.A = nA;
 	  vertices.capacity = nC;
 
+
 	  sparse_table<uintE,bool,hash_uintE>* nAA = pbbslib::new_array_no_init<sparse_table<uintE,bool,hash_uintE>>(nC);
 	  par_for(0,n,1,[&](size_t i){nAA[i] = C.A[i];});
+	  par_for(n,nC,1,[&](size_t i){nAA[i] = make_sparse_table<uintE,bool,hash_uintE>(1,std::make_tuple(UINT_E_MAX,false),hash_uintE());});
+	  
 	  pbbslib::free_array(C.A);
 	  C.A = nAA;
 	  C.capacity = nC;
 
+
 	  uintE* nAAA = pbbslib::new_array_no_init<uintE>(nC);
 	  par_for(0,n,1,[&](size_t i){nAAA[i] = cN.A[i];});
+	  par_for(n,nC,1,[&](size_t i){nAAA[i] = 0;});
 	  pbbslib::free_array(cN.A);
 	  cN.A = nAAA;
 	  cN.capacity = nC;
 
 	  uintE* nAAAA = pbbslib::new_array_no_init<uintE>(nC);
 	  par_for(0,n,1,[&](size_t i){nAAAA[i] = cStored.A[i];});
+	  par_for(n,nC,1,[&](size_t i){nAAAA[i] = 0;});
 	  pbbslib::free_array(cStored.A);
 	  cStored.A = nAAAA;
 	  cStored.capacity = nC;
 
 	  n = amount;
+	  SIZE_OF_GRAPH = amount;
    }
 
 	void resizeC(uintE v) {
 		uintE amount = std::max(cStored.A[v],(uintE)SIZE_OF_GRAPH);
 		if((amount << 1) <= C.A[v].m && (amount << 2) >= C.A[v].m) return; 
 		auto entries = C.A[v].entries();
-
 		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 		par_for(0,entries.size(),1,[&](size_t i) {if(std::get<1>(entries[i])) C.A[v].insert(entries[i]);});
 	}
@@ -183,7 +192,6 @@ struct HSetAlex {
 		sequence<std::pair<uintE,uintE>> all = merge_sort(s,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
 		long long curN = HIndex - BSize + cN.A[HIndex];
 
-
 		auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,s.size(),1,[&](size_t i) {
 			vertices.A[s[i].first] = s[i].second;
@@ -220,6 +228,7 @@ struct HSetAlex {
 			return cN.A[cur];
 		});
 
+		std::cout << "STEP 3" << std::endl;
 		pbbslib::scan_add_inplace(cNs);
 
 

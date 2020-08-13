@@ -152,22 +152,21 @@ struct dynamic_symmetric_graph {
   void batchAddVertices(sequence<uintE> & vertices) {
     size_t size = vertices.size();
     uintE ma = pbbs::reduce(vertices,pbbs::maxm<uintE>());
-
     adjustVdata(std::max((size_t)ma,v_data.capacity));
 
-    pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){return !existVertices.A[i];});
-
+    pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){return i >= this -> n;});
+    // cout << existingVertices.size() << endl;
     size_t sumV = existingVertices.size();
     par_for(0,sumV,1,[&](size_t i) {
       uintE id = existingVertices[i];
       existVertices.A[id] = true;
-      auto tmp = make_sparse_table<uintE,bool,hash_uintE>(INIT_DYN_GRAPH_EDGE_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
-      v_data.A[id].neighbors = tmp;
+      v_data.A[id].neighbors = make_sparse_table<uintE,bool,hash_uintE>(INIT_DYN_GRAPH_EDGE_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
       v_data.A[id].degree = 0;
       v_data.A[id].stored = 0;
     });
-    this -> n += sumV;
+    this -> n = std::max(this -> n,(size_t)ma);
+
   }
 
 
@@ -204,9 +203,10 @@ struct dynamic_symmetric_graph {
 
   // Add edges in the forms of pairs in parallel
   void batchAddEdges(sequence<std::pair<uintE,uintE>> edges) {
+    std::cout << "hiii" << std::endl;
     sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
+    
     uintE sumW = ds.size();
-
 
     this -> m += sumW;
 
@@ -236,7 +236,6 @@ struct dynamic_symmetric_graph {
     });
     // cout << start.m << endl;
     start.insert(std::make_tuple(all[0].first,0));
-
     v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
     v_data.A[all[2 * ds.size() - 1].first].stored += 2 * ds.size();
     auto entries = start.entries();
