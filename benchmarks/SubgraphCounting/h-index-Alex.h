@@ -228,7 +228,6 @@ struct HSetAlex {
 			return cN.A[cur];
 		});
 
-		std::cout << "STEP 3" << std::endl;
 		pbbslib::scan_add_inplace(cNs);
 
 
