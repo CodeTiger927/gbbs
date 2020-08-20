@@ -336,11 +336,16 @@ struct dynamic_symmetric_graph {
     start.insert(std::make_tuple(all[0].first,0));
     v_data.A[all[2 * ds.size() - 1].first].degree -= 2 * ds.size();
     auto entries = start.entries();
-    par_for(0,entries.size(),[&](size_t i) {
+cout << "SIZE"
+for (int i = 0; i < entries.size(); i++) {
+  cout << std::get<0>(entries[i]) << " " << std::get<1>(entries[i]) << endl;
+}
+    //par_for(0,entries.size(),[&](size_t i) {
+for (int i = 0; i < entries.size(); i++) {
       uintE cur = std::get<0>(entries[i]);
       v_data.A[cur].degree += std::get<1>(entries[i]);
       adjustNeighbors(cur);
-    });
+    }//);
 
   }
 };
@@ -363,8 +368,6 @@ dynamic_symmetric_graph<dynamic_symmetric_vertex,W> dynamifyDSG(Graph G) {
 
   pbbs::sequence<uintE> v = pbbs::sequence<uintE>(G.n,[&](size_t i){return i;});
   dsg.batchAddVertices(v);
-
-cout << "SIZE: " << dsg.n << endl;
 
   for(size_t i = 0; i < G.n;i++) {
     pbbs::sequence<uintE> s = pbbs::sequence<uintE>(G.get_vertex(i).degree,[&](size_t j){return G.get_vertex(i).getOutNeighbor(j);});
