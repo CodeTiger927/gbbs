@@ -5,8 +5,9 @@
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
+#include <assert.h>
 
-/*
+
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -34,24 +35,28 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   //HSet* h = new HSetDynArr(&_dynG);
   HSetDynArr* h = new HSetDynArr(&_dynG); //Temporarily using concrete type for debugging only
 
-  std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl; //|H| = 2
-  std::cout << "B size: " << h->bSize << endl; //|B| = 1
+  //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl; //|H| = 2
+  //std::cout << "B size: " << h->bSize << endl; //|B| = 1
 
-  pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(30);
+  //Run Data for batches.size() = 10000 
+  //real    2m46.280s
+  //user    19m28.278s
+  //sys	    1m34.892s
+  pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(10000);
 
   for (int i = 0; i < batches.size(); i++) {
-    std::cout << "\n-----CHANGE " << (i + 1) << "-----" << endl;
+    //std::cout << "\n-----CHANGE " << (i + 1) << "-----" << endl;
 
     batches[i] = barabasi_albert::generate_updates(rand() % 1000 + 50, rand() % 100 + 5);
 
     h->insertEdges(batches[i]);
-    std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
-    std::cout << "B size: " << h->bSize << endl;
+    //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
+    //std::cout << "B size: " << h->bSize << endl;
 
     size_t cSize = 0;
     if (h->C.A[h->hindex] != nullptr) cSize = h->C.A[h->hindex]->size;
 
-    std::cout << "C[hindex] size: " << cSize << endl;
+    //std::cout << "C[hindex] size: " << cSize << endl;
 
     size_t aboveH = 0;
     for (size_t j = 0; j < h->G->n; j++) {
@@ -59,24 +64,23 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
         aboveH++;
       }
     }
-    cout << "above H: " << aboveH << endl;
-
-    if (h->hindex + (cSize - h->bSize) != aboveH) cout << "-------------------VERY BAD------------------" << endl;
+    //std::cout << "above H: " << aboveH << endl;
+    assert(h->hindex + (cSize - h->bSize) == aboveH); //CHECK
 
   }
 
   for (int i = batches.size() - 1; i >= 0; i--) {
-    std::cout << "\n-----CHANGE " << (2 * batches.size() - i) << "-----" << endl;
+    //std::cout << "\n-----CHANGE " << (2 * batches.size() - i) << "-----" << endl;
 
     h->eraseEdges(batches[i]);
 
-    std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
-    std::cout << "B size: " << h->bSize << endl;
+    //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
+    //std::cout << "B size: " << h->bSize << endl;
 
     size_t cSize = 0;
     if (h->C.A[h->hindex] != nullptr) cSize = h->C.A[h->hindex]->size;
 
-    std::cout << "C[hindex] size: " << cSize << endl;
+    //std::cout << "C[hindex] size: " << cSize << endl;
 
     size_t aboveH = 0;
     for (size_t j = 0; j < h->G->n; j++) {
@@ -84,17 +88,17 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
         aboveH++;
       }
     }
-    cout << "above H: " << aboveH << endl;
+    //std::cout << "above H: " << aboveH << endl;
 
-    if (h->hindex + (cSize - h->bSize) != aboveH) cout << "-------------------VERY BAD------------------" << endl;
+    assert(h->hindex + (cSize - h->bSize) == aboveH);
     
   }
 
   return 0;
 
 }
-*/
 
+/*
 template <class Graph>
 double AppHIndex_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
@@ -181,6 +185,6 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
 
   return 0;
 }
-
+*/
 
 generate_symmetric_main(AppHIndex_runner, false);

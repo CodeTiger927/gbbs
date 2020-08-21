@@ -176,7 +176,7 @@ namespace pbbs {
   size_t pack_serial_at(Slice In, Slice2 Fl, Out_Seq Out) {
     size_t k = 0;
     for (size_t i=0; i < In.size(); i++)
-      if (Fl[i]) assign_uninitialized(Out[k++], In[i]);
+      if (Fl[i]) pbbs::assign_uninitialized(Out[k++], In[i]);
     return k;
   }
 
