@@ -11,26 +11,45 @@
 
 size_t SIZE_OF_GRAPH = 1005;
 
-struct HSetAlex {
-	HSetAlex() {
+class HSet {
+
+  public:
+    dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* G;
+    size_t hindex;
+
+    HSet(dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* _G) {
+      G = _G;
+      hindex = 0;
+    }
+
+    virtual pbbs::sequence<uintE> getH() = 0;
+    virtual bool contains(uintE target) = 0;
+
+    virtual uintE insertVertices(pbbs::sequence<uintE> vertices) = 0;
+    virtual uintE eraseVertices(pbbs::sequence<uintE> vertices) = 0;
+    virtual uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
+    virtual uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
+};
+
+
+class HSetAlex : public HSet {
+public:
+	HSetAlex(dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* graph): HSet(graph) {
 		init();
 	}
-
 	uintE n;
-	uintE HIndex;
 	sparse_table<uintE,bool,hash_uintE> B;
 	uintE BSize;
 	pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>> C;
 	pbbslib::dyn_arr<uintE> cN;
 	pbbslib::dyn_arr<uintE> cStored;
-	pbbslib::dyn_arr<uintE> vertices;
 
 	// This can potentially be O(N), but I think normally it would be smaller than O(h) in actual practice
 	sequence<uintE> allH() {
-
-		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * HIndex + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		// Make this O(H) by making a sparse table on all the degrees with at least 1. 
+		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * hindex + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 		
-		par_for(HIndex + 1,550,[&](size_t i) {
+		par_for(hindex + 1,550,[&](size_t i) {
 			if(cN.A[i] != 0) {
 				auto entries = C.A[i].entries();
 				par_for(0,entries.size(),100,[&](size_t j) {
@@ -49,11 +68,18 @@ struct HSetAlex {
 
 		return sequence<uintE>(f.size(),[&](size_t i) {return std::get<0>(f[i]);});
 	}
+	sequence<uintE> getH() {
+		return allH();
+	}
 
 	bool inH(uintE v) {
-		if(vertices.A[v] > HIndex) return true;
-		if(vertices.A[v] == HIndex) return B.find(v,false);
+		if(G -> v_data.A[v].degree > hindex) return true;
+		if(G -> v_data.A[v].degree == hindex) return B.find(v,false);
 		return false;
+	}
+
+	bool contains(uintE v) {
+		return inH(v);
 	}
 
 	void init() {
@@ -62,8 +88,7 @@ struct HSetAlex {
 		cN = pbbslib::dyn_arr<uintE>(0);
 		cStored = pbbslib::dyn_arr<uintE>(0);
 
-		vertices = pbbslib::dyn_arr<uintE>(0);
-		HIndex = 0;
+		hindex = 0;
 		BSize = 0;
 		B = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 	}
@@ -76,12 +101,6 @@ struct HSetAlex {
 	  }
 
 	  size_t nC = 1 << ((size_t)(ceil(log2(amount))));
-	  uintE* nA = pbbslib::new_array_no_init<uintE>(nC);
-	  par_for(0,n,1,[&](size_t i){nA[i] = vertices.A[i];});
-	  pbbslib::free_array(vertices.A);
-	  vertices.A = nA;
-	  vertices.capacity = nC;
-
 
 	  sparse_table<uintE,bool,hash_uintE>* nAA = pbbslib::new_array_no_init<sparse_table<uintE,bool,hash_uintE>>(nC);
 	  par_for(0,n,1,[&](size_t i){nAA[i] = C.A[i];});
@@ -119,26 +138,26 @@ struct HSetAlex {
 	}
 
 	void remove(sequence<uintE> s) {
-
 		n -= s.size();
-		sequence<uintE> all = merge_sort(s,[&](uintE a,uintE b) {return vertices.A[a] < vertices.A[b];});
-		long long curN = HIndex - BSize + cN.A[HIndex];
+
+		sequence<uintE> all = merge_sort(s,[&](uintE a,uintE b) {return G -> v_data.A[a].degree < G -> v_data.A[b].degree;});
+		
+		long long curN = hindex - BSize + cN.A[hindex];
 		par_for(0,s.size(),[&](size_t i) {
-			C.A[vertices.A[s[i]]].change(s[i],false);
+			C.A[G -> v_data.A[s[i]].degree].change(s[i],false);
 		});
 
 		auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * s.size() + 1,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,all.size(),1,[&](size_t i) {
 			if(i != 0) {
-				if(vertices.A[all[i]] != vertices.A[all[i - 1]]) {
-					start.insert(std::make_tuple(vertices.A[all[i]],i));
-					cN.A[vertices.A[all[i - 1]]] -= i;
+				if(G -> v_data.A[all[i]].degree != G -> v_data.A[all[i - 1]].degree) {
+					start.insert(std::make_tuple(G -> v_data.A[all[i]].degree,i));
+					cN.A[G -> v_data.A[all[i - 1]].degree] -= i;
 				}
 			}
 		});
-
-		start.insert(std::make_tuple(vertices.A[all[0]],0));
-		cN.A[vertices.A[all[all.size() - 1]]] -= all.size();
+		start.insert(std::make_tuple(G -> v_data.A[all[0]].degree,0));
+		cN.A[G -> v_data.A[all[all.size() - 1]].degree] -= all.size();
 		auto entries = start.entries();
 
 
@@ -148,33 +167,26 @@ struct HSetAlex {
 			resizeC(cur);
 		});
 
-
-		curN -= filter(s,[&](uintE i){return  vertices.A[i] >= HIndex;}).size();
-
-		par_for(0,s.size(),[&](size_t i) {
-			vertices.A[s[i]] = 0;
-		});
+		curN -= filter(s,[&](uintE i){return  G -> v_data.A[i].degree >= hindex;}).size();
 
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
-			long long cur = HIndex - i - 1;
+			long long cur = hindex - i - 1;
 			if(cur < 0) return (uintE)0;
 			return cN.A[cur];
 		});
 
-
-
 		pbbslib::scan_add_inplace(cNs);
 		sequence<long long> worksOrNo = sequence<long long>(cNs.size() + 1,[&](size_t i) {
-			if(((long long)curN + (long long)cNs[i]) >= ((long long)HIndex - (long long)i)) {
-				return ((long long)HIndex - (long long)i);
+			if(((long long)curN + (long long)cNs[i]) >= ((long long)hindex - (long long)i)) {
+				return ((long long)hindex - (long long)i);
 			}else{
 				return (long long)0;
 			}
 		});
 
-		uintE NHIndex = pbbs::reduce(worksOrNo,pbbs::maxm<long long>());
-		BSize = cN.A[NHIndex] - (curN + cNs[HIndex - NHIndex] - NHIndex);
-		auto allH = C.A[NHIndex].entries();		
+		uintE Nhindex = pbbs::reduce(worksOrNo,pbbs::maxm<long long>());
+		BSize = cN.A[Nhindex] - (curN + cNs[hindex - Nhindex] - Nhindex);
+		auto allH = C.A[Nhindex].entries();		
 
 		B = make_sparse_table(2 * std::max(BSize,(uintE)SIZE_OF_GRAPH) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
@@ -183,18 +195,17 @@ struct HSetAlex {
 		});
 
 
-		HIndex = NHIndex;
+		hindex = Nhindex;
 	}
 
 	void insert(sequence<std::pair<uintE,uintE>> s) {
 
 		n += s.size();
 		sequence<std::pair<uintE,uintE>> all = merge_sort(s,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
-		long long curN = HIndex - BSize + cN.A[HIndex];
+		long long curN = hindex - BSize + cN.A[hindex];
 
 		auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,s.size(),1,[&](size_t i) {
-			vertices.A[s[i].first] = s[i].second;
 			if(i != 0) {
 				if(all[i].second != all[i - 1].second) {
 					start.insert(std::make_tuple(all[i].second,i));
@@ -221,9 +232,9 @@ struct HSetAlex {
 		});
 
 
-		curN += filter(s,[&](std::pair<uintE,uintE> i){return i.second >= HIndex;}).size();
+		curN += filter(s,[&](std::pair<uintE,uintE> i){return i.second >= hindex;}).size();
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
-			uintE cur = i + HIndex;
+			uintE cur = i + hindex;
 			if(cur >= SIZE_OF_GRAPH) return (uintE)0;
 			return cN.A[cur];
 		});
@@ -232,24 +243,24 @@ struct HSetAlex {
 
 
 		sequence<uintE> worksOrNo = sequence<uintE>(cNs.size(),[&](size_t i) {
-			if((long long)curN - (long long)cNs[i] >= (long long)HIndex + (long long)i) {
-				return (uintE)(HIndex + i);
+			if((long long)curN - (long long)cNs[i] >= (long long)hindex + (long long)i) {
+				return (uintE)(hindex + i);
 			}else{
-				return HIndex;
+				return (uintE)hindex;
 			}
 		});
 
 
-		uintE NHIndex = pbbs::reduce(worksOrNo,pbbs::maxm<uintE>());
+		uintE Nhindex = pbbs::reduce(worksOrNo,pbbs::maxm<uintE>());
 
-		auto allH = C.A[NHIndex].entries();
-		BSize = NHIndex - (curN - cNs[NHIndex - HIndex + 1]);
+		auto allH = C.A[Nhindex].entries();
+		BSize = Nhindex - (curN - cNs[Nhindex - hindex + 1]);
 		B = make_sparse_table(2 * BSize + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
 		par_for(0,BSize,[&](size_t i) {
 			B.insert(allH[i]);
 		});
-		HIndex = NHIndex;
+		hindex = Nhindex;
 	}
 
    void modify(sequence<std::pair<uintE,uintE>> s) {
@@ -257,4 +268,70 @@ struct HSetAlex {
 		remove(tR);
 		insert(s);
    }
+
+	uintE insertVertices(pbbs::sequence<uintE> vertices) {
+		G -> batchAddVertices(vertices);
+	}
+
+	uintE eraseVertices(pbbs::sequence<uintE> vertices) {
+		G -> batchRemoveVertices(vertices);
+	}
+
+	uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
+		auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {
+			if(i % 2) {
+				return edges[i / 2].first;
+			}else{
+				return edges[i / 2].second;
+			}}),[&](uintE a,uintE b){return a > b;});
+
+		auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
+			if(i == 0) {
+				return aN[i];
+			}else{
+				if(aN[i] != aN[i - 1]) {
+					return aN[i];
+				}else{
+					return UINT_E_MAX;
+				}
+			}
+  		});
+
+		allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
+		// for(int i = 0;i < allNodes.size();++i) {
+		// 	cout << allNodes[i] << " " << G -> v_data.A[allNodes[i]].degree << endl;
+		// }
+		remove(allNodes);
+		G -> batchAddEdges(edges);
+		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
+	}
+
+	uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
+		auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {
+			if(i % 2) {
+				return edges[i / 2].first;
+			}else{
+				return edges[i / 2].second;
+		}}),[&](uintE a,uintE b){return a > b;});
+
+		auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
+			if(i == 0) {
+				return aN[i];
+			}else{
+				if(aN[i] != aN[i - 1]) {
+					return aN[i];
+				}else{
+					return UINT_E_MAX;
+				}
+			}
+		});
+
+		allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
+
+		remove(allNodes);
+		
+		G -> batchRemoveEdges(edges);
+
+		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
+    }
 };

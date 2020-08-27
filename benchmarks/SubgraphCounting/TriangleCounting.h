@@ -1,9 +1,9 @@
 
 // Here is a lot of the things that need to be manually fixed
-uintE N = 10;
+uintE N = 1005;
 
 dynamic_symmetric_graph<dynamic_symmetric_vertex,uintE> dsg = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex,uintE>();
-HSetAlex hset = HSetAlex();
+HSetAlex hset = HSetAlex(&dsg);
 uintE wedges[1005][1005];
 uintE total = 0;
 
@@ -169,7 +169,7 @@ void initialize(size_t n) {
   hset.resizeV(n);
   sequence<uintE> nodes = sequence<uintE>(n,[&](size_t i) {return i;});
   sequence<std::pair<uintE,uintE>> hPairs = sequence<std::pair<uintE,uintE>>(n,[&](size_t i) {return std::make_pair(i,0);});
-  dsg.batchAddVertices(nodes);
+  hset.insertVertices(nodes);
   hset.insert(hPairs);
 }
 
@@ -180,35 +180,9 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     allEdges.insert(std::make_tuple(edges[i],true));
     allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
   });
-
-  auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
-    return edges[i / 2].first;
-  }else{
-    return edges[i / 2].second;
-  }}),[&](uintE a,uintE b){return a > b;});
-
-  auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
-    if(i == 0) {
-      return aN[i];
-    }else{
-      if(aN[i] != aN[i - 1]) {
-        return aN[i];
-      }else{
-        return UINT_E_MAX;
-      }
-    }
-  });
-
-  allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
-
-  dsg.batchAddEdges(edges);
-
   sequence<uintE> originalH = hset.allH();
 
-
-  auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
-
-  hset.modify(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);}));
+  hset.insertEdges(edges);
 
   sequence<uintE> hs = hset.allH();
 
@@ -445,10 +419,8 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     aT.A[i] = 0;
   });
 
-
   // wedges that need to be removed
   pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> tW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
-
 
   par_for(0,edges.size(),[&](size_t i) {
     uintE u = std::get<1>(edges[i]);
@@ -632,30 +604,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   hT.size = hT.capacity;
   total += pbbs::reduce(hT.to_seq(),pbbs::addm<long long>()) / 6;
 
-  auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {if(i % 2) {
-    return edges[i / 2].first;
-  }else{
-    return edges[i / 2].second;
-  }}),[&](uintE a,uintE b){return a > b;});
-
-  auto allNodes = sequence<uintE>(2 * edges.size(),[&](size_t i) {
-    if(i == 0) {
-      return aN[i];
-    }else{
-      if(aN[i] != aN[i - 1]) {
-        return aN[i];
-      }else{
-        return UINT_E_MAX;
-      }
-    }
-  });
-
-  allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
-  dsg.batchRemoveEdges(edges);
-
-  auto tmp = sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);});
-
-  hset.modify(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],dsg.v_data.A[allNodes[i]].degree);}));
+  hset.eraseEdges(edges);
 
   sequence<uintE> hs = hset.allH();
 
@@ -670,7 +619,6 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalRemove = concatSeq(tW);
   sequence<std::pair<uintE,uintE>> allR = merge_sort(finalRemove.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
   removeWedges(allR);
-
 }
 
 // // Basic concept and not parallel
