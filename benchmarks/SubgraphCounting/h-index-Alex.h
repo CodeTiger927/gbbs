@@ -231,7 +231,6 @@ public:
 			C.A[s[i].second].insert(std::make_tuple(s[i].first,true));
 		});
 
-
 		curN += filter(s,[&](std::pair<uintE,uintE> i){return i.second >= hindex;}).size();
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
 			uintE cur = i + hindex;
