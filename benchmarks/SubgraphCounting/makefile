@@ -43,7 +43,7 @@ CC = g++
 PFLAGS = $(HGFLAGS)
 endif
 
-ALL=h-index
+ALL=SubgraphCounting
 
 all: $(ALL)
 

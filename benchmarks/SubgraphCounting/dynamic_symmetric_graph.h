@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstring>
 #include <stdlib.h>
 #include <fstream>
@@ -8,13 +10,8 @@
 #include <cmath>
 
 #include "pbbslib/sequence_ops.h"
-
 #include "pbbslib/merge_sort.h"
-
-#include "pbbslib/monoid.h"
-
 #include "ligra/pbbslib/sparse_table.h"
-
 #include "ligra/pbbslib/dyn_arr.h"
 
 
