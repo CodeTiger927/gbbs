@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstring>
 #include <stdlib.h>
 #include <fstream>
@@ -8,13 +10,9 @@
 #include <cmath>
 
 #include "pbbslib/sequence_ops.h"
-
 #include "pbbslib/merge_sort.h"
-
 #include "pbbslib/monoid.h"
-
 #include "ligra/pbbslib/sparse_table.h"
-
 #include "ligra/pbbslib/dyn_arr.h"
 
 
@@ -330,7 +328,7 @@ struct dynamic_symmetric_graph {
 
     adjustNeighbors(all[0].first);
 
-    par_for(0,all.size(),1000000,[&](size_t i) {
+    par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       if(i != 0) {
         if(cur.first != all[i - 1].first) {
