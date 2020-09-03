@@ -39,6 +39,7 @@ public:
 	}
 	uintE n;
 	sparse_table<uintE,bool,hash_uintE> B;
+	sparse_table<uintE,bool,hash_uintE> eDegs;
 	uintE BSize;
 	pbbslib::dyn_arr<sparse_table<uintE,bool,hash_uintE>> C;
 	pbbslib::dyn_arr<uintE> cN;
@@ -48,14 +49,13 @@ public:
 	sequence<uintE> allH() {
 		// Make this O(H) by making a sparse table on all the degrees with at least 1. 
 		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * hindex + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-		
-		par_for(hindex + 1,550,[&](size_t i) {
-			if(cN.A[i] != 0) {
-				auto entries = C.A[i].entries();
-				par_for(0,entries.size(),100,[&](size_t j) {
-					if(std::get<1>(entries[j])) all.insert(std::make_tuple(std::get<0>(entries[j]),true));
-				});
-			}
+		auto allDegs = eDegs.entries();
+		par_for(0,allDegs.size(),[&](size_t i) {
+			if(!std::get<1>(allDegs[i]) || std::get<0>(allDegs[i]) <= hindex) return;
+			auto entries = C.A[std::get<0>(allDegs[i])].entries();
+			par_for(0,entries.size(),1,[&](size_t j) {
+				if(std::get<1>(entries[j])) all.insert(std::make_tuple(std::get<0>(entries[j]),true));
+			});
 		});
 
 		auto b = B.entries();
@@ -91,9 +91,16 @@ public:
 		hindex = 0;
 		BSize = 0;
 		B = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		eDegs = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 	}
 
-   void resizeV(size_t amount) {
+	void resizeDegs(size_t size) {
+		auto entries = eDegs.entries();
+		eDegs = make_sparse_table<uintE,bool,hash_uintE>(size,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		par_for(0,entries.size(),[&](size_t i) {if(std::get<1>(entries[i])) eDegs.insert(entries[i]);});
+	}
+
+	void resizeV(size_t amount) {
 	  amount = std::max(amount,INIT_DYN_GRAPH_EDGE_SIZE);
 	  size_t cur = n;
 	  if(amount != 0 && ceil(log2(amount)) == ceil(log2(cur))) {
@@ -131,10 +138,11 @@ public:
 
 	void resizeC(uintE v) {
 		uintE amount = std::max(cStored.A[v],(uintE)SIZE_OF_GRAPH);
-		if((amount << 1) <= C.A[v].m && (amount << 2) >= C.A[v].m) return; 
+		if(amount << 1 <= C.A[v].m && ((std::max(cN.A[v],(uintE)SIZE_OF_GRAPH)) << 2) >= C.A[v].m) return; 
 		auto entries = C.A[v].entries();
-		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * (std::max(cN.A[v],(uintE)SIZE_OF_GRAPH)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
 		par_for(0,entries.size(),1,[&](size_t i) {if(std::get<1>(entries[i])) C.A[v].insert(entries[i]);});
+		cStored.A[v] = cN.A[v];
 	}
 
 	void remove(sequence<uintE> s) {
@@ -147,25 +155,26 @@ public:
 			C.A[G -> v_data.A[s[i]].degree].change(s[i],false);
 		});
 
-		auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * s.size() + 1,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,all.size(),1,[&](size_t i) {
 			if(i != 0) {
 				if(G -> v_data.A[all[i]].degree != G -> v_data.A[all[i - 1]].degree) {
-					start.insert(std::make_tuple(G -> v_data.A[all[i]].degree,i));
 					cN.A[G -> v_data.A[all[i - 1]].degree] -= i;
 				}
 			}
 		});
-		start.insert(std::make_tuple(G -> v_data.A[all[0]].degree,0));
+
 		cN.A[G -> v_data.A[all[all.size() - 1]].degree] -= all.size();
-		auto entries = start.entries();
 
-
-		par_for(0,entries.size(),[&](size_t i) {
-			uintE cur = std::get<0>(entries[i]);
-			cN.A[cur] += std::get<1>(entries[i]);
-			resizeC(cur);
+		par_for(0,all.size(),1,[&](size_t i) {
+			if(i != 0) {
+				if(G -> v_data.A[all[i]].degree != G -> v_data.A[all[i - 1]].degree) {
+					cN.A[G -> v_data.A[all[i]].degree] += i;
+					resizeC(G -> v_data.A[all[i]].degree);
+				}
+			}
 		});
+
+		resizeC(G -> v_data.A[all[0]].degree);
 
 		curN -= filter(s,[&](uintE i){return  G -> v_data.A[i].degree >= hindex;}).size();
 
@@ -194,8 +203,13 @@ public:
 			B.insert(allH[i]);
 		});
 
-
 		hindex = Nhindex;
+
+		par_for(0,s.size(),[&](size_t i) {
+			if(cN.A[G -> v_data.A[s[i]].degree] == 0) eDegs.change(G -> v_data.A[s[i]].degree,false);
+		});
+		resizeDegs(2 * hindex);
+
 	}
 
 	void insert(sequence<std::pair<uintE,uintE>> s) {
@@ -204,28 +218,29 @@ public:
 		sequence<std::pair<uintE,uintE>> all = merge_sort(s,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.second > b.second;});
 		long long curN = hindex - BSize + cN.A[hindex];
 
-		auto start = make_sparse_table<uintE,uintE,hash_uintE>(s.size(),std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
 		par_for(0,s.size(),1,[&](size_t i) {
 			if(i != 0) {
 				if(all[i].second != all[i - 1].second) {
-					start.insert(std::make_tuple(all[i].second,i));
 					cN.A[all[i - 1].second] += i;
 					cStored.A[all[i - 1].second] += i;
 				}
 			}
 		});
 
-		start.insert(std::make_tuple(all[0].second,0));
 		cN.A[all[all.size() - 1].second] += all.size();
 		cStored.A[all[all.size() - 1].second] += all.size();
-		auto entries = start.entries();
 
-		par_for(0,entries.size(),[&](size_t i) {
-			uintE cur = std::get<0>(entries[i]);
-			cN.A[std::get<0>(entries[i])] -= std::get<1>(entries[i]);
-			cStored.A[std::get<0>(entries[i])] -= std::get<1>(entries[i]);
-			resizeC(std::get<0>(entries[i]));
+		par_for(0,s.size(),1,[&](size_t i) {
+			if(i != 0) {
+				if(all[i].second != all[i - 1].second) {
+					cN.A[all[i].second] -= i;
+					cStored.A[all[i].second] -= i;
+					resizeC(all[i].second);
+				}
+			}
 		});
+
+		resizeC(all[0].second);
 
 		par_for(0,s.size(),[&](size_t i) {
 			C.A[s[i].second].insert(std::make_tuple(s[i].first,true));
@@ -260,6 +275,12 @@ public:
 			B.insert(allH[i]);
 		});
 		hindex = Nhindex;
+
+		resizeDegs(2 * hindex);
+		par_for(0,s.size(),[&](size_t i) {
+			eDegs.insert(std::make_tuple(G -> v_data.A[s[i].first].degree,true));
+			eDegs.insert(std::make_tuple(G -> v_data.A[s[i].second].degree,true));
+		});
 	}
 
    void modify(sequence<std::pair<uintE,uintE>> s) {
