@@ -10,10 +10,10 @@ class HSetDynArr : public HSet {
 
   public:
 
-    uintE bSize;
-    pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C;
+    uintE bSize; //Number of elements with degree hindex and are inside H
+    pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C; //Sorts all vertices by degree
 
-    //Constructor
+    //Constructor - Takes in initial graph
     HSetDynArr(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) : HSet(_G) {
 
       bSize = 0;
@@ -41,8 +41,10 @@ class HSetDynArr : public HSet {
     //sorted = true if batch is already sorted in descending order
     uintE insert(sequence<uintE> batch, bool sorted = false) {
 
+      //Exits if there are no vertices in batch
       if (batch.size() == 0) return this->hindex;
 
+      //Sortes vertices by degree in descending order  
       pbbs::sequence<uintE> sortedBatch;
       if (!sorted) {
         sortedBatch = integer_sort(batch, [&] (uintE v) { return this->G->get_vertex(v).degree; }).rslice();
@@ -53,7 +55,7 @@ class HSetDynArr : public HSet {
       }
       batch.clear();
 
-      //Stores degrees and sorts in descending order
+      //Stores degrees in descending order
       sequence<uintE> deg = pbbs::sequence<uintE>(sortedBatch.size());
       par_for(0, sortedBatch.size(), [&] (size_t i) {
         deg[i] = deg[i] = this->G->get_vertex(sortedBatch[i]).degree;
@@ -70,18 +72,21 @@ class HSetDynArr : public HSet {
       }
 
       //--------------------------Updating Variables--------------------------//
+      //Current number of vertices with degree >= |H| is |H| - |B| + |C[|H|]|
       uintE aboveH = this->hindex - bSize;
       if (this->hindex < C.size && C.A[this->hindex] != nullptr) aboveH += C.A[this->hindex]->size;
 
+      //Number of vertices being added in batch with degree >= current |H|
       uintE added = pbbs::binary_search(deg, [&] (uintE x) { //Number of vertices that are above new hindex
         return x >= this->hindex;
       });
 
       aboveH += added;
 
-      addToC(sortedBatch, deg);
+      addToC(sortedBatch, deg); //Updates C
 
       //--------------------------Compute H-index--------------------------//
+      //Begins constructing sum array where each number indicates the number of vertices lost in H if hindex increases
       pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(sortedBatch.size() + 1);
       par_for(0, sortedBatch.size(), [&] (size_t i) {
         if (this->hindex + i < C.size && C.A[this->hindex + i] != nullptr) {

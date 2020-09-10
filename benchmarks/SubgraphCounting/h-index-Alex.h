@@ -279,10 +279,12 @@ public:
 
 	uintE insertVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchAddVertices(vertices);
+		return hindex;
 	}
 
 	uintE eraseVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchRemoveVertices(vertices);
+		return hindex;
 	}
 
 	uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
@@ -312,6 +314,7 @@ public:
 		remove(allNodes);
 		G -> batchAddEdges(edges);
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
+		return hindex;
 	}
 
 	uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
@@ -341,5 +344,6 @@ public:
 		G -> batchRemoveEdges(edges);
 
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
+		return hindex;
     }
 };

@@ -1,5 +1,6 @@
 #include "hindex_dyn_arr.h"
 #include "hindex_threshold.h"
+#include "h-index-Alex.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
 #include "pbbslib/get_time.h"
@@ -58,7 +59,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "### ------------------------------------" << endl;
 
   assert(P.getOption("-s"));
-  assert(type < 2); //Valid option (will increase as there are more options)
+  assert(type < 3); //Valid option (will increase as there are more options)
 
   timer clock;
 
@@ -72,6 +73,10 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   else if (type == 1) {
     h = new HSetThreshold(&_dynG, GA.n);
     std::cout << "THRESHOLD VERSION\n" << std::endl;
+  }
+  else if (type == 2) {
+    h = new HSetAlex(&_dynG);
+    std::cout << "SPARSE_TABLE VERSION\n" << std::endl;
   }
 
   clock.start();
@@ -87,7 +92,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   for (int i = size - 1; i >= 0; i--) {
     std::cout << "\n-----CHANGE " << (2 * size - i) << "-----" << std::endl;
-    batches[i] = barabasi_albert::generate_updates(rand() % 1000 + 50, rand() % 100 + 5);
+    batches[i] = barabasi_albert::generate_updates(rand() % 100 + 50, rand() % 10 + 5);
     h->eraseEdges(getEdges(batches[i]));
 
     std::cout << "h-index: " << h->hindex << std::endl;
