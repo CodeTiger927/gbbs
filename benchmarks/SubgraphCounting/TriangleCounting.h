@@ -1,18 +1,26 @@
 
-// Here is a lot of the things that need to be manually fixed
-uintE N = 1005;
-
-dynamic_symmetric_graph<dynamic_symmetric_vertex,uintE> dsg = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex,uintE>();
-HSetAlex hset = HSetAlex(&dsg);
-uintE wedges[1005][1005];
-uintE total = 0;
-
-auto seq2da = [&](sequence<std::pair<uintE,uintE>> s) -> pbbslib::dyn_arr<std::pair<uintE,uintE>> {pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size()); par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];}); res.size = s.size(); return res;};
-
 struct hash_pair {
   inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) * 3) ^ (pbbs::hash64(a.second) >> 32));}
 };
 
+// Converts sequences to dynamic array
+auto seq2da = [&](sequence<std::pair<uintE,uintE>> s) -> pbbslib::dyn_arr<std::pair<uintE,uintE>> {pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size()); par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];}); res.size = s.size(); return res;};
+
+struct TriangleCounting {
+// Here is a lot of the things that need to be manually fixed
+uintE N = 1005;
+
+dynamic_symmetric_graph<dynamic_symmetric_vertex,pbbs::empty> dsg = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex,pbbs::empty>();
+HSetAlex hset = HSetAlex(&dsg);
+// uintE wedges[1005][1005];
+sparse_table<std::pair<uintE,uintE>,uintE,hash_pair> wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(N,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
+uintE total = 0;
+
+TriangleCounting() {
+
+}
+
+// Concatenates a lot of dynamic dynamic arrays into one
 pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> & s) {
   sequence<uintE> sizes = sequence<uintE>(s.size + 1,[&](size_t i) {
     if(i == s.size) {
@@ -31,6 +39,7 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn
   return res;
 }
 
+// Concatenates two dynamic arrays into one
 pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<uintE,uintE>> & f,pbbslib::dyn_arr<std::pair<uintE,uintE>> & s) {
 
   pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(f.size + s.size);
@@ -46,31 +55,87 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<u
   return res;
 }
 
+
+// Function for debugging. Prints all the elements in H Set
+void printH() {
+  for(int i = 0;i < hset.allH().size();++i) {
+    std::cout << hset.allH()[i] << " ";
+  }
+  std::cout << endl;
+}
+
+// Function for debugging. Prints the counts for all the wedges
+void printAllWedges() {
+  for(int i = 0; i < N;++i) {
+    for(int j = i + 1;j < N;++j) {
+      cout << i << " - " << j << " : " << wedges.find(std::make_pair(i,j),0) << endl;
+    }
+  }
+  cout << "-----------------------------" << endl;
+}
+
+// Resizes Wedges sparse table, and ensures that the sparsity is always at least 2, so that find functions takes less than O(2) expected value
+void resizeWedges(uintE amount) {
+  amount = std::max(amount,(uintE)4);
+  if(amount << 1 <= wedges.m && amount << 2 >= wedges.m) return;
+  auto entries = wedges.entries();
+  wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(2 * amount,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
+  par_for(0,entries.size(),[&](size_t i) {if(std::get<1>(entries[i])) wedges.insert(entries[i]);});
+}
+
+// Adds c to wedges (a,b)
+void addToWedge(uintE a,uintE b,uintE c) {
+  uintE res = wedges.find(std::make_pair(a,b),0);
+  if(res == 0) {
+    wedges.insert(std::make_tuple(std::make_pair(a,b),c));
+    wedges.change(std::make_pair(a,b),c);
+  }else{
+    wedges.change(std::make_pair(a,b),res + c);
+  }
+}
+
+// Subtracts c from wedges (a,b)
+void remFrWedge(uintE a,uintE b,uintE c) {
+  uintE res = wedges.find(std::make_pair(a,b),0);
+  if(res == 0) {
+    wedges.insert(std::make_tuple(std::make_pair(a,b),res - c));
+  }else{
+    wedges.change(std::make_pair(a,b),res - c);
+  }
+}
+
+// Given a series of wedges, add them
 void addWedges(sequence<std::pair<uintE,uintE>> seq) {
   par_for(0,seq.size(),[&](size_t i) {
     if(i != 0) {
       if(seq[i] != seq[i - 1]) {
-        wedges[seq[i - 1].first][seq[i - 1].second] += i;
+        // wedges[seq[i - 1].first][seq[i - 1].second] += i;
+        addToWedge(seq[i - 1].first,seq[i - 1].second,i);
       }
     }
   });
+
+  if(seq.size() != 0) addToWedge(seq[seq.size() - 1].first,seq[seq.size() - 1].second,seq.size());
 
   par_for(0,seq.size(),[&](size_t i) {
     if(i != 0) {
       if(seq[i] != seq[i - 1]) {
-        wedges[seq[i].first][seq[i].second] -= i;
+        // wedges[seq[i].first][seq[i].second] -= i;
+        remFrWedge(seq[i].first,seq[i].second,i);
       }
     }
   });
 
-  if(seq.size() != 0) wedges[seq[seq.size() - 1].first][seq[seq.size() - 1].second] += seq.size();
+
 }
 
+// Given a series of wedges, remove them
 void removeWedges(sequence<std::pair<uintE,uintE>> seq) {
   par_for(0,seq.size(),[&](size_t i) {
     if(i != 0) {
       if(seq[i] != seq[i - 1]) {
-        wedges[seq[i - 1].first][seq[i - 1].second] -= i;
+        addToWedge(seq[i].first,seq[i].second,i);
+        // wedges[seq[i].first][seq[i].second] += i;
       }
     }
   });
@@ -78,14 +143,17 @@ void removeWedges(sequence<std::pair<uintE,uintE>> seq) {
   par_for(0,seq.size(),[&](size_t i) {
     if(i != 0) {
       if(seq[i] != seq[i - 1]) {
-        wedges[seq[i].first][seq[i].second] += i;
+        remFrWedge(seq[i - 1].first,seq[i - 1].second,i);
+        // wedges[seq[i - 1].first][seq[i - 1].second] -= i;
       }
     }
   });
-  if(seq.size() != 0) wedges[seq[seq.size() - 1].first][seq[seq.size() - 1].second] -= seq.size();
+
+  if(seq.size() != 0) remFrWedge(seq[seq.size() - 1].first,seq[seq.size() - 1].second,seq.size());
 }
 
 
+// After modifying the H-Sets, this function adjusts the wedges so that everything is according to the new H Set.
 void adjustHSetWedges(sequence<uintE>& originalH,sequence<uintE>& hs,sparse_table<std::pair<uintE,uintE>,bool,hash_pair>& allEdges,sparse_table<uintE,bool,hash_uintE>& originalHSet) {
 
   // Wedges that need to be added due to being removed form HSet
@@ -164,23 +232,26 @@ void adjustHSetWedges(sequence<uintE>& originalH,sequence<uintE>& hs,sparse_tabl
   removeWedges(allR);
 }
 
-
+// Initializes as a graph of n vertices(or with id of at most n - 1)
 void initialize(size_t n) {
   hset.resizeV(n);
+  resizeWedges(n * n);
   sequence<uintE> nodes = sequence<uintE>(n,[&](size_t i) {return i;});
   sequence<std::pair<uintE,uintE>> hPairs = sequence<std::pair<uintE,uintE>>(n,[&](size_t i) {return std::make_pair(i,0);});
   hset.insertVertices(nodes);
   hset.insert(hPairs);
 }
 
+// Adds edges to the graph, which will also modify the H-Set and update the triangle counts
 void addEdges(sequence<std::pair<uintE,uintE>> edges) {
-  // STEP 1
+  // STEP 1 - Adjust the H Set
   auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
   par_for(0,edges.size(),[&](size_t i) {
     allEdges.insert(std::make_tuple(edges[i],true));
     allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
   });
   sequence<uintE> originalH = hset.allH();
+
 
   hset.insertEdges(edges);
 
@@ -190,7 +261,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
   par_for(0,originalH.size(),[&](size_t i) {
     originalHSet.insert(std::make_tuple(originalH[i],true));
-  });
+  });  
 
   adjustHSetWedges(originalH,hs,allEdges,originalHSet);
 
@@ -204,8 +275,9 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     aT.A[i] = 0;
   });
 
-
   // newly formed wedges
+
+  // STEP 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
   pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> tW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
 
   par_for(0,edges.size(),[&](size_t i) {
@@ -216,7 +288,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     tW.A[2 * i + 1] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
 
     // Case 1, added by wedges
-    wT.A[i] = wedges[v][u];
+    wT.A[i] = wedges.find(std::make_pair(v,u),0);
 
     if(!hset.inH(v)) {
       auto edgesV = dsg.v_data.A[v].neighbors.entries();
@@ -227,7 +299,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       par_for(0,edgesV.size(),[&](size_t i) {
         aTv.A[i] = 0;
         uintE next = std::get<0>(edgesV[i]);
-        if(next == u) {
+        if(next == u || !std::get<1>(edgesV[i])) {
           tWv.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           tWv.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           return;
@@ -291,7 +363,7 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
       par_for(0,edgesU.size(),[&](size_t i) {
         aTu.A[i] = 0;
         uintE next = std::get<0>(edgesU[i]);
-        if(next == v) {
+        if(next == v || !std::get<1>(edgesU[i])) {
 
           tWu.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           tWu.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
@@ -346,7 +418,8 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     }
   });
 
-  // STEP 2
+
+  // STEP 3 - Find triangles formed with the H Set
   // triangles formed with h-set
   pbbslib::dyn_arr<uintE> hT = pbbslib::dyn_arr<uintE>(edges.size());
   par_for(0,edges.size(),[&](size_t i) {
@@ -375,20 +448,16 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
     hT.A[i] = pbbs::reduce(uvhT.to_seq(),pbbs::addm<uintE>());
   });
 
-  // STEP 3
+  // STEP 4, update the counts and the wedges
 
   tW.size = tW.capacity;
-  // cout << "lalalala" << endl;
   wT.size = wT.capacity;
-  // cout << pbbs::reduce(wT.to_seq(),pbbs::addm<uintE>()) << endl;
   total += pbbs::reduce(wT.to_seq(),pbbs::addm<uintE>());
 
   aT.size = aT.capacity;
-  // cout << pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) << endl;
   total += pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) / 12;
 
   hT.size = hT.capacity;
-  // cout << pbbs::reduce(hT.to_seq(),pbbs::addm<uintE>()) << endl;
   total += pbbs::reduce(hT.to_seq(),pbbs::addm<uintE>()) / 6;
 
   // STEP 4
@@ -396,10 +465,11 @@ void addEdges(sequence<std::pair<uintE,uintE>> edges) {
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalAdd = concatSeq(tW);
 
   sequence<std::pair<uintE,uintE>> all = merge_sort(finalAdd.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
-
   addWedges(all);
+
 }
 
+// Removes edges from the graph, which will also modify the H-Set and update the triangle counts
 void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
   par_for(0,edges.size(),[&](size_t i) {
@@ -420,6 +490,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
   // wedges that need to be removed
+  // STEP 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
   pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> tW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
 
   par_for(0,edges.size(),[&](size_t i) {
@@ -430,7 +501,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     tW.A[2 * i + 1] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
 
     // Case 1, removed by wedges
-    wT.A[i] = wedges[v][u];
+    wT.A[i] = wedges.find(std::make_pair(v,u),0);
 
     if(!hset.inH(v)) {
       auto edgesV = dsg.v_data.A[v].neighbors.entries();
@@ -441,13 +512,13 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       par_for(0,edgesV.size(),[&](size_t i) {
         aTv.A[i] = 0;
         uintE next = std::get<0>(edgesV[i]);
-        if(next == u) {
+        if(next == u || !std::get<1>(edgesV[i])) {
           tWv.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           tWv.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           return;
         }
         if(allEdges.find(std::make_pair(v,next),false)) {
-          // Both are added edges
+          // Both are removed edges
           tWv.A[2 * i] = std::make_pair(u,next);
           tWv.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
         }else{
@@ -492,8 +563,6 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       aT.A[i] = pbbs::reduce(aTv.to_seq(),pbbs::addm<uintE>());
     }
 
-
-
     if(!hset.inH(u)) {
       auto edgesU = dsg.v_data.A[u].neighbors.entries();
 
@@ -506,8 +575,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       par_for(0,edgesU.size(),[&](size_t i) {
         aTu.A[i] = 0;
         uintE next = std::get<0>(edgesU[i]);
-        if(next == v) {
-
+        if(next == v || !std::get<1>(edgesU[i])) {
           tWu.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           tWu.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
           return;
@@ -561,7 +629,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
   });
 
 
-  // triangles removed with h-set
+  // STEP 2 - triangles removed with h-set
   pbbslib::dyn_arr<long long> hT = pbbslib::dyn_arr<long long>(edges.size());
   par_for(0,edges.size(),[&](size_t i) {
     hT.A[i] = 0;
@@ -594,15 +662,18 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     uvhT.size = uvhT.capacity;
     hT.A[i] = pbbs::reduce(uvhT.to_seq(),pbbs::addm<long long>());
   });
+
+  // STEP 3 - Updates all the counts
+
   tW.size = tW.capacity;
-  // cout << "lalalala" << endl;
   wT.size = wT.capacity;
   total -= pbbs::reduce(wT.to_seq(),pbbs::addm<uintE>());
   aT.size = aT.capacity;
   total += pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) / 12;
-
   hT.size = hT.capacity;
   total += pbbs::reduce(hT.to_seq(),pbbs::addm<long long>()) / 6;
+
+  // STEP 4 - Updates the HSet and the wedges
 
   hset.eraseEdges(edges);
 
@@ -614,36 +685,10 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
     originalHSet.insert(std::make_tuple(originalH[i],true));
   });
 
-  adjustHSetWedges(originalH,hs,allEdges,originalHSet);
-
   pbbslib::dyn_arr<std::pair<uintE,uintE>> finalRemove = concatSeq(tW);
   sequence<std::pair<uintE,uintE>> allR = merge_sort(finalRemove.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
   removeWedges(allR);
+  adjustHSetWedges(originalH,hs,allEdges,originalHSet); 
 }
+};
 
-// // Basic concept and not parallel
-// uintE connectEdge(uintE v,uintE u) {
-//   if(dsg.existEdge(u,v)) return total;
-//   hset.connect(u,v);
-
-//   auto entries = hset.P.entries();
-//   total += wedges[v][u];
-//   par_for(0,entries.size(),1,[&](size_t i){
-//     if(dsg.existEdge(std::get<0>(entries[0]),u) && dsg.existEdge(std::get<0>(entries[0]),v)) ++total;
-//   });
-//   if(!checkTF(hset.P,v)) {
-//     par_for(0,dsg.v_data[v].entries.size,1,[&](size_t i) {
-//       ++wedges[u][std::get<0>(dsg.v_data[v].entries[i])];
-//       ++wedges[std::get<0>(dsg.v_data[v].entries[i])][u];
-//     });
-//   }
-
-//   if(!checkTF(hset.P,u)) {
-//     par_for(0,dsg.v_data[u].entries.size,1,[&](size_t i) {
-//       ++wedges[v][std::get<0>(dsg.v_data[u].entries[i])];
-//       ++wedges[std::get<0>(dsg.v_data[u].entries[i])][v];
-//     });
-//   }
-//   dsg.addEdge(u,v);
-//   return total;
-// }

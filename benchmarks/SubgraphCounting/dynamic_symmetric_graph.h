@@ -23,7 +23,6 @@ std::function<void()> get_deletion_fn(void*, void*, void*);
 std::function<void()> get_deletion_fn(void*, void*, void*, void*);
 
 
-
 struct hash_uintE {
   inline size_t operator () (const uintE & a) {return pbbs::hash64_2(a);}
 };

@@ -8,33 +8,11 @@
 #include "ligra/pbbslib/sparse_table.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "pbbslib/sequence.h"
-
-size_t SIZE_OF_GRAPH = 1005;
-
-class HSet {
-
-  public:
-    dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* G;
-    size_t hindex;
-
-    HSet(dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* _G) {
-      G = _G;
-      hindex = 0;
-    }
-
-    virtual pbbs::sequence<uintE> getH() = 0;
-    virtual bool contains(uintE target) = 0;
-
-    virtual uintE insertVertices(pbbs::sequence<uintE> vertices) = 0;
-    virtual uintE eraseVertices(pbbs::sequence<uintE> vertices) = 0;
-    virtual uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
-    virtual uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
-};
-
+#include "hindex.h"
 
 class HSetAlex : public HSet {
 public:
-	HSetAlex(dynamic_symmetric_graph<dynamic_symmetric_vertex, uintE>* graph): HSet(graph) {
+	HSetAlex(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* graph): HSet(graph) {
 		init();
 	}
 	uintE n;
@@ -49,6 +27,14 @@ public:
 	sequence<uintE> allH() {
 		// Make this O(H) by making a sparse table on all the degrees with at least 1. 
 		auto all = make_sparse_table<uintE,bool,hash_uintE>(2 * hindex + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		// par_for(hindex + 1,550,[&](size_t i) {
+		// 	if(cN.A[i] != 0) {
+		// 		auto entries = C.A[i].entries();
+		// 		par_for(0,entries.size(),100,[&](size_t j) {
+		// 			if(std::get<1>(entries[j])) all.insert(std::make_tuple(std::get<0>(entries[j]),true));
+		// 		});
+		// 	}
+		// });
 		auto allDegs = eDegs.entries();
 		par_for(0,allDegs.size(),[&](size_t i) {
 			if(!std::get<1>(allDegs[i]) || std::get<0>(allDegs[i]) <= hindex) return;
@@ -90,8 +76,8 @@ public:
 
 		hindex = 0;
 		BSize = 0;
-		B = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-		eDegs = make_sparse_table<uintE,bool,hash_uintE>(SIZE_OF_GRAPH,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		B = make_sparse_table<uintE,bool,hash_uintE>(INIT_C_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		eDegs = make_sparse_table<uintE,bool,hash_uintE>(INIT_C_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 	}
 
 	void resizeDegs(size_t size) {
@@ -133,14 +119,14 @@ public:
 	  cStored.capacity = nC;
 
 	  n = amount;
-	  SIZE_OF_GRAPH = amount;
    }
 
 	void resizeC(uintE v) {
-		uintE amount = std::max(cStored.A[v],(uintE)SIZE_OF_GRAPH);
-		if(amount << 1 <= C.A[v].m && ((std::max(cN.A[v],(uintE)SIZE_OF_GRAPH)) << 2) >= C.A[v].m) return; 
+		uintE amount = std::max(cStored.A[v],(uintE)INIT_DEG_SIZE);
+		if(amount << 1 <= C.A[v].m && ((std::max(cN.A[v],(uintE)INIT_DEG_SIZE)) << 2) >= C.A[v].m) return; 
 		auto entries = C.A[v].entries();
-		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * (std::max(cN.A[v],(uintE)SIZE_OF_GRAPH)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		// Something weird is going on here. Not sure what
+		C.A[v] = make_sparse_table<uintE,bool,hash_uintE>(2 * (std::max(cN.A[v],(uintE)INIT_C_SIZE)),std::make_tuple(UINT_E_MAX,false),hash_uintE());
 		par_for(0,entries.size(),1,[&](size_t i) {if(std::get<1>(entries[i])) C.A[v].insert(entries[i]);});
 		cStored.A[v] = cN.A[v];
 	}
@@ -197,7 +183,7 @@ public:
 		BSize = cN.A[Nhindex] - (curN + cNs[hindex - Nhindex] - Nhindex);
 		auto allH = C.A[Nhindex].entries();		
 
-		B = make_sparse_table(2 * std::max(BSize,(uintE)SIZE_OF_GRAPH) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+		B = make_sparse_table(2 * std::max(BSize,(uintE)INIT_C_SIZE) + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
 		par_for(0,BSize,[&](size_t i) {
 			B.insert(allH[i]);
@@ -249,7 +235,7 @@ public:
 		curN += filter(s,[&](std::pair<uintE,uintE> i){return i.second >= hindex;}).size();
 		sequence<uintE> cNs = sequence<uintE>(s.size() + 2,[&](size_t i) {
 			uintE cur = i + hindex;
-			if(cur >= SIZE_OF_GRAPH) return (uintE)0;
+			if(cur >= n) return (uintE)0;
 			return cN.A[cur];
 		});
 
@@ -279,7 +265,9 @@ public:
 		resizeDegs(2 * hindex);
 		par_for(0,s.size(),[&](size_t i) {
 			eDegs.insert(std::make_tuple(G -> v_data.A[s[i].first].degree,true));
+			eDegs.change(G -> v_data.A[s[i].first].degree,true);
 			eDegs.insert(std::make_tuple(G -> v_data.A[s[i].second].degree,true));
+			eDegs.change(G -> v_data.A[s[i].second].degree,true);
 		});
 	}
 
