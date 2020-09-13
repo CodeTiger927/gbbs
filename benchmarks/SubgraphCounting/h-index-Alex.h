@@ -279,15 +279,24 @@ public:
 
 	uintE insertVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchAddVertices(vertices);
+		auto batch = pbbs::sequence<std::pair<uintE, uintE>>(vertices.size());
+		par_for(0, vertices.size(), [&] (size_t i) {
+			batch[i] = std::make_pair(vertices[i], G->get_vertex(vertices[i]).degree);
+		});
+		resizeV(n + batch.size());
+		insert(batch);
 		return hindex;
 	}
 
 	uintE eraseVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchRemoveVertices(vertices);
+		remove(vertices);
+		resizeV(n);
 		return hindex;
 	}
 
 	uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
+
 		auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {
 			if(i % 2) {
 				return edges[i / 2].first;
@@ -308,11 +317,17 @@ public:
   		});
 
 		allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
+		auto newNodes = filter(allNodes, [&] (uintE v) {
+			if (v < this->G->existVertices.size) return !this->G->existVertices.A[v];
+        		else return true;
+      		});
+		insertVertices(newNodes);
 		// for(int i = 0;i < allNodes.size();++i) {
 		// 	cout << allNodes[i] << " " << G -> v_data.A[allNodes[i]].degree << endl;
 		// }
 		remove(allNodes);
 		G -> batchAddEdges(edges);
+		resizeV(n + edges.size());
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
 		return hindex;
 	}
@@ -344,6 +359,7 @@ public:
 		G -> batchRemoveEdges(edges);
 
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
+		resizeV(n);
 		return hindex;
     }
 };

@@ -77,6 +77,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   else if (type == 2) {
     h = new HSetAlex(&_dynG);
     std::cout << "SPARSE_TABLE VERSION\n" << std::endl;
+
+    pbbs::sequence<uintE> start = pbbs::sequence<uintE>(GA.n);
+    par_for(0, GA.n, [&] (size_t i){
+      start[i] = i;
+    });
+
+    h->insertVertices(start);
   }
 
   clock.start();
@@ -92,7 +99,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   for (int i = size - 1; i >= 0; i--) {
     std::cout << "\n-----CHANGE " << (2 * size - i) << "-----" << std::endl;
-    batches[i] = barabasi_albert::generate_updates(rand() % 100 + 50, rand() % 10 + 5);
     h->eraseEdges(getEdges(batches[i]));
 
     std::cout << "h-index: " << h->hindex << std::endl;

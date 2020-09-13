@@ -172,8 +172,6 @@ struct dynamic_symmetric_graph {
   }
 
 
-
-
   // Check if an edge exists
   bool existEdge(uintE v,uintE u) {
     return v_data.A[v].neighbors.find(u,false);
@@ -270,7 +268,6 @@ struct dynamic_symmetric_graph {
     v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
     v_data.A[all[2 * ds.size() - 1].first].stored += 2 * ds.size();
     auto entries = start.entries();
-
     par_for(0,entries.size(),[&](size_t i) {
       uintE cur = std::get<0>(entries[i]);
       if (cur >= v_data.size) return;
@@ -278,7 +275,6 @@ struct dynamic_symmetric_graph {
       v_data.A[cur].stored -= std::get<1>(entries[i]);
       adjustNeighbors(cur);
     });
-
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       v_data.A[cur.first].neighbors.insert(std::make_tuple(cur.second,true));
@@ -375,7 +371,6 @@ struct dynamic_symmetric_graph {
 
     /*
     auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * all.size() + 1,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
-
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       v_data.A[cur.first].neighbors.change(cur.second,false);
@@ -386,12 +381,9 @@ struct dynamic_symmetric_graph {
         }
       }
     });
-
-
     start.insert(std::make_tuple(all[0].first,0));
     v_data.A[all[2 * ds.size() - 1].first].degree -= 2 * ds.size();
     auto entries = start.entries();
-
     par_for(0,entries.size(),[&](size_t i) {
       uintE cur = std::get<0>(entries[i]);
       v_data.A[cur].degree += std::get<1>(entries[i]);
