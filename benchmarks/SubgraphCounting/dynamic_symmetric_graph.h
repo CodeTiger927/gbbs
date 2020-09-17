@@ -30,6 +30,7 @@ struct hash_uintE {
 struct dynamic_vertex_data {
   uintE degree;  // vertex degree
   sparse_table<uintE,bool,hash_uintE> neighbors; // Sparse_table
+  // TODO: What is stored for?
   uintE stored; // Sparse_table
 };
 
@@ -50,6 +51,8 @@ struct dynamic_symmetric_vertex {
   }
 
   // Return all the neighbors of that vertex
+  // TODO: When is this used? Why would you need to populate all neighbors,
+  // versus just iterating over all neighbors?
   sequence<uintE> getAllNeighbor() {
     auto entries = neighbors -> entries();
     sequence<uintE> res = sequence<uintE>(entries.size(),[&](size_t i) {
@@ -87,6 +90,8 @@ struct dynamic_symmetric_graph {
       : n(_n),
         m(_m),
         deletion_fn(_deletion_fn) {
+          // TODO: What about initializing existVertices? Why is that commented
+          // out?
           v_data = pbbslib::dyn_arr<dynamic_vertex_data>(_v_data.size);
           par_for(0,_v_data.size,1,[&](size_t i) {
             v_data.A[i] = _v_data.A[i];
@@ -120,6 +125,10 @@ struct dynamic_symmetric_graph {
     v_data.A = nA;
     v_data.capacity = nC;
 
+    // TODO: Don't you have to initialize all entries in nAA to be false first?
+    // If you're trying to increase capacity to a greater size than the existing
+    // size of existVertices, then the entries above the previous size are not
+    // guaranteed to be false, like you would want it to be.
     bool* nAA = pbbslib::new_array_no_init<bool>(nC);
     par_for(0,existVertices.size,1,[&](size_t i){nAA[i] = existVertices.A[i];});
     pbbslib::free_array(existVertices.A);
@@ -137,7 +146,10 @@ struct dynamic_symmetric_graph {
  
     auto entries = v_data.A[u].neighbors.entries();
     // Sparsity of always at least 2, so find takes on average 2 steps to find empty
+    // TODO: Why are you manually adjusting the size to 2 * amount, instead of
+    // letting the initializer for the sparse table take care of that?
     v_data.A[u].neighbors = make_sparse_table<uintE,bool,hash_uintE>(2 * amount,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    // TODO: What does clearA do?
     v_data.A[u].neighbors.clearA(v_data.A[u].neighbors.table, v_data.A[u].neighbors.m, v_data.A[u].neighbors.empty);
     par_for(0,entries.size(),1,[&](size_t i) {
       uintE cur = std::get<0>(entries[i]);
@@ -154,6 +166,7 @@ struct dynamic_symmetric_graph {
     uintE ma = pbbs::reduce(vertices,pbbs::maxm<uintE>());
     adjustVdata(std::max((size_t)ma,v_data.capacity));
 
+    // TODO: You don't need to use this -> if it's not ambiguous.
     pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){return i >= this -> n;});
     // cout << existingVertices.size() << endl;
     size_t sumV = existingVertices.size();
@@ -165,6 +178,9 @@ struct dynamic_symmetric_graph {
       v_data.A[id].degree = 0;
       v_data.A[id].stored = 0;
     });
+    // TODO: This seems dangerous. Shouldn't it be n = ma? You take the vertices
+    // to generally be in the range 0 to n, and if a vertex is within that
+    // range but not explicitly added, it's just a 0 degree vertex.
     this -> n += sumV;
     v_data.size = std::max(this -> n,(size_t)ma);
     existVertices.size = std::max(this -> n,(size_t)ma);
@@ -187,6 +203,12 @@ struct dynamic_symmetric_graph {
 
     v_data.A[u].degree += ds.size();
     v_data.A[u].stored += ds.size();
+    // TODO: I find this kind of weird because it means that stored and degree
+    // aren't updated at the same time the neighbors are updated; you're
+    // impliclty updating stored / degree, and then increasing the capacity,
+    // instead of passing in the updated degree as a parameter and doing it
+    // all in adjustNeighbors. Also, what's the difference between degree
+    // and stored?
     adjustNeighbors(u);
 
     par_for(0,ds.size(),1,[&](size_t i) {
@@ -229,6 +251,7 @@ struct dynamic_symmetric_graph {
       idx[i] = i;
     });
 
+    // TODO: What is this doing?
     auto f = [&] (size_t i) { return i == all.size() - 1 || all[i].first != all[i + 1].first; };
     auto indices = pbbs::filter(idx, f);
     idx.clear();
@@ -299,6 +322,8 @@ struct dynamic_symmetric_graph {
 
     adjustVdata(v_data.size - sumV);
 
+    // TODO: I'm not sure n should be reduced unless the max vertex index
+    // is reduced.
     this -> n -= sumV;
   }
 
