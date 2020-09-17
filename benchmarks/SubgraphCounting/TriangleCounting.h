@@ -3,6 +3,8 @@ struct hash_pair {
   inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) * 3) ^ (pbbs::hash64(a.second) >> 32));}
 };
 
+// TODO: You shouldn't have global variables like this. You can make it a function
+// if you'd like.
 // Converts sequences to dynamic array
 auto seq2da = [&](sequence<std::pair<uintE,uintE>> s) -> pbbslib::dyn_arr<std::pair<uintE,uintE>> {pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size()); par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];}); res.size = s.size(); return res;};
 
@@ -642,6 +644,7 @@ void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
       if(dsg.existEdge(u,next) && dsg.existEdge(v,next)) {
         // Triangle!
         // I decided to this instead, since if i do case work, there would be like 26 if statements
+        // TODO: What is the meaning of these counters?
         int counter = 1;
         int counter2 = -1;
         if(allEdges.find(std::make_pair(u,next),false) && hset.inH(v)) {
