@@ -47,7 +47,10 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE,
 
 template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
+  // TODO: You don't really have to static cast type to uintE. It's fine as a
+  // long.
   uintE type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
+  // TODO: What is size for?
   uintE size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
 
   std::cout << "### Application: Subgraph Counting" << std::endl;
