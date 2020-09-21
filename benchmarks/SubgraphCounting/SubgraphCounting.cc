@@ -1,6 +1,6 @@
 #include "hindex_dyn_arr.h"
 #include "hindex_threshold.h"
-#include "h-index-Alex.h"
+#include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
 #include "pbbslib/get_time.h"
@@ -35,8 +35,8 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE,
     }
   });    
 
-  auto uniqueEdges = filter(eTemp, [&] (std::pair<uintE, uintE> i) { return (i.first != UINT_E_MAX && i.second != UINT_E_MAX); } );
-
+  auto uniqueEdges = filter(eTemp, [&] (std::pair<uintE, uintE> i) { return (i.first != UINT_E_MAX && i.second != UINT_E_MAX) && (i.first != i.second); } );
+ 
   return uniqueEdges;
 }
 
@@ -45,13 +45,11 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE,
 
 //e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 "inputs/graph_test_3.txt"
 
+
 template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
-  // TODO: You don't really have to static cast type to uintE. It's fine as a
-  // long.
-  uintE type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
-  // TODO: What is size for?
-  uintE size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
+  long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
+  long size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
 
   std::cout << "### Application: Subgraph Counting" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
@@ -62,11 +60,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "### ------------------------------------" << endl;
 
   assert(P.getOption("-s"));
-  assert(type < 3); //Valid option (will increase as there are more options)
+  assert(type < 2); //Valid option (will increase as there are more options)
+
 
   timer clock;
 
-  auto _dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA); //Dynamify inside main
+  //auto _dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA); //Dynamify inside main
+  auto _dynG = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex, pbbs::empty>();
   HSet* h;
 
   if (type == 0) {
@@ -77,42 +77,64 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetThreshold(&_dynG, GA.n);
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
-  else if (type == 2) {
-    h = new HSetAlex(&_dynG);
-    std::cout << "SPARSE_TABLE VERSION\n" << std::endl;
 
-    pbbs::sequence<uintE> start = pbbs::sequence<uintE>(GA.n);
-    par_for(0, GA.n, [&] (size_t i){
-      start[i] = i;
-    });
-
-    h->insertVertices(start);
-  }
+  TriangleCounting triangle = TriangleCounting(h);
 
   clock.start();
 
   pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(size);
   for (int i = 0; i < size; i++) {
     std::cout << "\n-----CHANGE " << (i + 1) << "-----" << std::endl;
+
     batches[i] = barabasi_albert::generate_updates(rand() % 1000 + 50, rand() % 100 + 5);
-    h->insertEdges(getEdges(batches[i]));
+    //batches[i] = barabasi_albert::generate_updates(rand() % 10, rand() % 5); //Smaller dataset easier to debug
 
+    //h->insertEdges(getEdges(batches[i]));
+    triangle.addEdges(getEdges(batches[i]));
+
+    int t = 0;
+    for (int u = 0; u < h->G->n; u++) {
+      for (int v = u + 1; v < h->G->n; v++) {
+        for (int w = v + 1; w < h->G->n; w++) {
+          if (h->G->existEdge(u, v) && h->G->existEdge(u, w) && h->G->existEdge(v, w)) t++;
+        }
+      }
+    }
+
+    std::cout << "Trianges: " << triangle.total << " " << t << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
-  }
 
+    assert(t == triangle.total);
+  }
+  
   for (int i = size - 1; i >= 0; i--) {
     std::cout << "\n-----CHANGE " << (2 * size - i) << "-----" << std::endl;
-    h->eraseEdges(getEdges(batches[i]));
+    //h->eraseEdges(getEdges(batches[i]));
 
+    triangle.removeEdges(getEdges(batches[i]));
+    int t = 0;
+
+    for (int u = 0; u < h->G->n; u++) {
+      for (int v = u + 1; v < h->G->n; v++) {
+        for (int w = v + 1; w < h->G->n; w++) {
+          if (h->G->existEdge(u, v) && h->G->existEdge(u, w) && h->G->existEdge(v, w)) t++;
+        }
+      }
+    }
+
+    std::cout << "Trianges: " << triangle.total << " " << t << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
+
+    assert(t == triangle.total);
   }
+  
 
   std::cout << "\n\n------------------------------------" << endl;
+  std::cout << "FINAL GRAPH SIZE: " << h->G->n << ", " << h->G->m << endl;
   std::cout << "RUN TIME: " << clock.stop() << std::endl;
 
   return 0;
 }
-
 
 generate_symmetric_main(AppSubgraphCounting_runner, false);
 
@@ -146,7 +168,7 @@ generate_symmetric_main(AppSubgraphCounting_runner, false);
 
 /* HSET DYN ARR
 template <class Graph>
-double AppHIndex_runner(Graph& GA, commandLine P) {
+double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "### Application: H Index" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
   std::cout << "### Threads: " << num_workers() << std::endl;
@@ -172,6 +194,7 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   //HSet* h = new HSetDynArr(&_dynG);
   HSetDynArr* h = new HSetDynArr(&_dynG); //Temporarily using concrete type for debugging only
 
+
   //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl; //|H| = 2
   //std::cout << "B size: " << h->bSize << endl; //|B| = 1
 
@@ -179,57 +202,60 @@ double AppHIndex_runner(Graph& GA, commandLine P) {
   //real    2m46.280s
   //user    19m28.278s
   //sys	    1m34.892s
-  pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(100);
+  pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(1000);
 
   for (int i = 0; i < batches.size(); i++) {
-    //std::cout << "\n-----CHANGE " << (i + 1) << "-----" << endl;
+    std::cout << "\n-----CHANGE " << (i + 1) << "-----" << endl;
 
     batches[i] = barabasi_albert::generate_updates(rand() % 1000 + 50, rand() % 100 + 5);
 
-    h->insertEdges(batches[i]);
-    //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
-    //std::cout << "B size: " << h->bSize << endl;
+    h->insertEdges(getEdges(batches[i]));
+    std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
+    std::cout << "B size: " << h->bSize << endl;
 
     size_t cSize = 0;
     if (h->C.A[h->hindex] != nullptr) cSize = h->C.A[h->hindex]->size;
 
-    //std::cout << "C[hindex] size: " << cSize << endl;
+    std::cout << "C[hindex] size: " << cSize << endl;
+
 
     size_t aboveH = 0;
     for (size_t j = 0; j < h->G->n; j++) {
-      if (h->G->get_vertex(j).degree >= h->hindex) {
+      if (j < h->G->existVertices.size && h->G->existVertices.A[j] && h->G->get_vertex(j).degree >= h->hindex) {
         aboveH++;
       }
     }
-    //std::cout << "above H: " << aboveH << endl;
+    std::cout << "above H: " << aboveH << endl;
     assert(h->hindex + (cSize - h->bSize) == aboveH); //CHECK
 
   }
 
   for (int i = batches.size() - 1; i >= 0; i--) {
-    //std::cout << "\n-----CHANGE " << (2 * batches.size() - i) << "-----" << endl;
+    std::cout << "\n-----CHANGE " << (2 * batches.size() - i) << "-----" << endl;
 
-    h->eraseEdges(batches[i]);
+    h->eraseEdges(getEdges(batches[i]));
 
-    //std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
-    //std::cout << "B size: " << h->bSize << endl;
+    std::cout << "h-index: " << h->hindex << "    " << h->getH().size() << endl;
+    std::cout << "B size: " << h->bSize << endl;
 
     size_t cSize = 0;
     if (h->C.A[h->hindex] != nullptr) cSize = h->C.A[h->hindex]->size;
 
-    //std::cout << "C[hindex] size: " << cSize << endl;
+    std::cout << "C[hindex] size: " << cSize << endl;
 
     size_t aboveH = 0;
-    for (size_t j = 0; j < h->G->n; j++) {
-      if (h->G->get_vertex(j).degree >= h->hindex) {
+    for (size_t j = 0; j < 1500; j++) {
+      if (j < h->G->existVertices.size && h->G->existVertices.A[j] && h->G->get_vertex(j).degree >= h->hindex) {
         aboveH++;
       }
     }
-    //std::cout << "above H: " << aboveH << endl;
+    std::cout << "above H: " << aboveH << endl;
 
     assert(h->hindex + (cSize - h->bSize) == aboveH);
     
   }
+
+  std::cout << h->G->n << endl;
 
   return 0;
 
