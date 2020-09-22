@@ -30,12 +30,12 @@ class HSet {
 
     virtual pbbs::sequence<uintE> getH() = 0;
     virtual bool contains(uintE target) = 0;
+    virtual void initExtra(uintE n) = 0;
 
     virtual uintE insertVertices(pbbs::sequence<uintE> vertices) = 0;
     virtual uintE eraseVertices(pbbs::sequence<uintE> vertices) = 0;
     virtual uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
     virtual uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
-  
 };
 
 

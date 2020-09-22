@@ -36,6 +36,8 @@ class HSetDynArr : public HSet {
 
     }
 
+    void initExtra(uintE n) {}
+
     //--------------------------INSERT--------------------------//
     //batch is a sequence of vertex ids (that can be used to get from graph)
     //sorted = true if batch is already sorted in descending order
