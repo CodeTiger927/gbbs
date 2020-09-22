@@ -1,3 +1,11 @@
+/*
+Sep 20 23:30:27 primes1 kernel: [174398.210409] [  28229]  1000 28229  3232462  3012172 25145344        0             0 SubgraphCountin
+Sep 20 23:30:27 primes1 kernel: [174398.210410] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/user.slice/user-1000.slice/user@1000.service,task=SubgraphCountin,pid=28229,uid=1000
+Sep 20 23:30:27 primes1 kernel: [174398.210420] Out of memory: Killed process 28229 (SubgraphCountin) total-vm:12929848kB, anon-rss:12048688kB, file-rss:0kB, shmem-rss:0kB
+Sep 20 23:30:27 primes1 kernel: [174398.556404] oom_reaper: reaped process 28229 (SubgraphCountin), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
+
+*/
+
 #include "hindex_dyn_arr.h"
 #include "hindex_threshold.h"
 #include "TriangleCounting.h"
@@ -93,6 +101,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     triangle.addEdges(getEdges(batches[i]));
 
     int t = 0;
+
     for (int u = 0; u < h->G->n; u++) {
       for (int v = u + 1; v < h->G->n; v++) {
         for (int w = v + 1; w < h->G->n; w++) {
@@ -109,9 +118,10 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   
   for (int i = size - 1; i >= 0; i--) {
     std::cout << "\n-----CHANGE " << (2 * size - i) << "-----" << std::endl;
-    //h->eraseEdges(getEdges(batches[i]));
 
+    //h->eraseEdges(getEdges(batches[i]));
     triangle.removeEdges(getEdges(batches[i]));
+
     int t = 0;
 
     for (int u = 0; u < h->G->n; u++) {

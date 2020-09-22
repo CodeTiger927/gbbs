@@ -75,6 +75,24 @@ struct TriangleCounting {
     return res;
   }
 
+  // Resizes Wedges sparse table, and ensures that the sparsity is always at least 2, so that find functions takes less than O(2) expected value
+  void resizeWedges(uintE amount) {
+    amount = std::max(amount,(uintE) 4);
+    if(amount << 1 <= wedges.m && amount << 2 >= wedges.m) return;
+    
+    auto entries = wedges.entries();
+    pbbs::sequence<uintE> added = pbbs::sequence<uintE>(entries.size());
+
+    wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(2 * amount,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
+    par_for(0, entries.size(),[&](size_t i) { 
+      if(std::get<1>(entries[i])) {
+        wedges.insert(entries[i]);
+        added[i] = 1;
+      }
+      else added[i] = 0;
+    });
+    stored = pbbslib::reduce_add(added);
+  }
 
   // Function for debugging. Prints all the elements in H Set
   void printH() {
@@ -92,17 +110,6 @@ struct TriangleCounting {
       }
     }
     cout << "-----------------------------" << endl;
-  }
-
-  // Resizes Wedges sparse table, and ensures that the sparsity is always at least 2, so that find functions takes less than O(2) expected value
-  void resizeWedges(uintE amount) {
-    amount = std::max(amount,(uintE) 4);
-    if(amount << 1 <= wedges.m && amount << 2 >= wedges.m) return;
-    //auto entries = pbbs::filter(wedges.entries(), [&] (std::tuple<std::pair<uintE, uintE>, uintE> i) { return std::get<1>(i) > 0; });
-    auto entries = wedges.entries();
-    wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(2 * amount,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
-    par_for(0,entries.size(),[&](size_t i) {if(std::get<1>(entries[i])) wedges.insert(entries[i]);});
-    stored = entries.size();
   }
 
   // Adds c to wedges (a,b)

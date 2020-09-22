@@ -124,8 +124,8 @@ struct dynamic_symmetric_graph {
 
 
   // A function that determines whether it is worth it to resize neighbors
-  void adjustNeighbors(uintE u, uintE increase = 0) {
-    size_t amount = std::max((size_t)(v_data.A[u].stored),INIT_DYN_GRAPH_EDGE_SIZE) + increase;
+  void adjustNeighbors(uintE u) {
+    size_t amount = std::max((size_t)(v_data.A[u].stored),INIT_DYN_GRAPH_EDGE_SIZE);
     size_t cur = v_data.A[u].neighbors.m;
     if((amount << 1) <= cur && (amount << 2) >= cur) return;
  
@@ -162,9 +162,9 @@ struct dynamic_symmetric_graph {
       v_data.A[id].degree = 0;
       v_data.A[id].stored = 0;
     });
-    this -> n = std::max(this -> n,(size_t)ma + 1);
-    v_data.size = std::max(this -> n,(size_t)ma + 1);
-    existVertices.size = std::max(this -> n,(size_t)ma + 1);
+    n = std::max(this -> n,(size_t)ma + 1);
+    v_data.size = n;
+    existVertices.size = n;
 
   }
 
@@ -194,7 +194,7 @@ struct dynamic_symmetric_graph {
       uintE v = ds[i];
       v_data.A[v].degree++;
       v_data.A[v].stored++;
-      adjustNeighbors(v, 1);
+      adjustNeighbors(v);
 
       v_data.A[v].neighbors.insert(std::make_tuple(u,true));
       v_data.A[u].neighbors.insert(std::make_tuple(v,true));
@@ -242,7 +242,7 @@ struct dynamic_symmetric_graph {
       uintE v = extra[0].first;
       v_data.A[v].degree += extra.size();
       v_data.A[v].stored += extra.size();
-      adjustNeighbors(v, extra.size());
+      adjustNeighbors(v);
       par_for(0, extra.size(), [&] (size_t j) {
         v_data.A[v].neighbors.insert(std::make_tuple(extra[j].second, true));
       });

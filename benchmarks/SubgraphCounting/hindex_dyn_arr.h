@@ -310,6 +310,7 @@ class HSetDynArr : public HSet {
           }
           return true;
         };
+
         if (deg[indices[i]] != this->hindex) {
 
           auto filtered = pbbs::new_array_no_init<uintE>(C.A[deg[indices[i]]]->capacity);
@@ -390,8 +391,8 @@ class HSetDynArr : public HSet {
     }
 
     uintE eraseVertices(sequence<uintE> vertices) {
-      this->G->batchRemoveVertices(vertices);
       erase(vertices);
+      this->G->batchRemoveVertices(vertices);
       adjust();
       return this->hindex;
     }
@@ -399,11 +400,13 @@ class HSetDynArr : public HSet {
     //Insert edges once e.g. u--v inserts v--u as well
     uintE insertEdges(sequence<std::pair<uintE, uintE>> edges) {
 
+      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !this->G->existEdge(e.first, e.second); } );
+
       //Get unique vertices
-      sequence<uintE> vertices = sequence<uintE>(2 * edges.size());
-      par_for(0, edges.size(), [&] (size_t i) {
-       vertices[2 * i] = edges[i].first;
-       vertices[(2 * i) + 1] = edges[i].second; 
+      sequence<uintE> vertices = sequence<uintE>(2 * existEdges.size());
+      par_for(0, existEdges.size(), [&] (size_t i) {
+       vertices[2 * i] = existEdges[i].first;
+       vertices[(2 * i) + 1] = existEdges[i].second; 
       });
 
       pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) { return v; });
@@ -436,7 +439,7 @@ class HSetDynArr : public HSet {
       if (newVertices.size() != 0) insertVertices(newVertices);
 
       erase(uniqueVertices);
-      this->G->batchAddEdges(edges);
+      this->G->batchAddEdges(existEdges);
       insert(uniqueVertices);
 
       uniqueVertices.clear();
@@ -446,11 +449,13 @@ class HSetDynArr : public HSet {
 
     uintE eraseEdges(sequence<std::pair<uintE, uintE>> edges) {
     
+      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return this->G->existEdge(e.first, e.second); } );
+
       //Get unique vertices
-      sequence<uintE> vertices = sequence<uintE>(2 * edges.size());
-      par_for(0, edges.size(), [&] (size_t i) {
-       vertices[2 * i] = edges[i].first;
-       vertices[(2 * i) + 1] = edges[i].second; 
+      sequence<uintE> vertices = sequence<uintE>(2 * existEdges.size());
+      par_for(0, existEdges.size(), [&] (size_t i) {
+       vertices[2 * i] = existEdges[i].first;
+       vertices[(2 * i) + 1] = existEdges[i].second; 
       });
 
       pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) { return v; });
@@ -474,15 +479,23 @@ class HSetDynArr : public HSet {
       auto uniqueVertices = filter(vTemp, [&] (uintE i) { return (i != UINT_E_MAX); } );
       vTemp.clear();
 
-      auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>(edges.size(), [&] (size_t i) {
-        if (edges[i].first > edges[i].second) return std::make_pair(edges[i].second, edges[i].first);
-        else return edges[i];
+      auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>(existEdges.size(), [&] (size_t i) {
+        if (existEdges[i].first > existEdges[i].second) return std::make_pair(existEdges[i].second, existEdges[i].first);
+        else return existEdges[i];
       });
 
 
       erase(uniqueVertices);
-      this->G->batchRemoveEdges(edges);
+      this->G->batchRemoveEdges(existEdges);
       insert(uniqueVertices);
+
+      auto toRemove = pbbs::filter(uniqueVertices, [&] (uintE v) {
+        if (v < this->G->existVertices.size) {
+          return this->G->existVertices.A[v] && this->G->get_vertex(v).degree == 0;
+        }
+        else return false;
+      });
+      eraseVertices(toRemove);
 
       uniqueVertices.clear();
       adjust();
