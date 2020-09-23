@@ -370,11 +370,11 @@ class HSetDynArr : public HSet {
         par_for(0, C.size, [&] (size_t i) {
           nA[i] = C.A[i];
         });
-        par_for(C.size, C.capacity, [&] (size_t i) {
+        par_for(C.size, std::max(2 * C.size, INIT_C_SIZE), [&] (size_t i) {
           nA[i] = nullptr;
         });
         if (C.alloc) {
-         pbbslib::free_array(C.A);
+         //pbbslib::free_array(C.A);
         }
         C.A = nA;
         C.capacity = std::max(2 * C.size, INIT_C_SIZE);

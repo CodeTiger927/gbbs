@@ -10,10 +10,10 @@
 #include "pbbslib/sequence.h"
 #include "hindex.h"
 
-class HSetAlex : public HSet {
+class HSetSparseTable : public HSet {
 public:
-	HSetAlex(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* graph): HSet(graph) {
-		init();
+	HSetSparseTable(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* graph, uintE size): HSet(graph) {
+		initExtra(size);
 	}
 	uintE n;
 	sparse_table<uintE,bool,hash_uintE> B;
@@ -80,6 +80,11 @@ public:
 		eDegs = make_sparse_table<uintE,bool,hash_uintE>(INIT_C_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 	}
 
+	void initExtra(uintE n) {
+		resizeV(n);
+		insert(sequence<std::pair<uintE,uintE>>(n,[&](size_t i) {return std::make_pair(i,0);}));
+	}
+
 	void resizeDegs(size_t size) {
 		auto entries = eDegs.entries();
 		eDegs = make_sparse_table<uintE,bool,hash_uintE>(size,std::make_tuple(UINT_E_MAX,false),hash_uintE());
@@ -97,7 +102,7 @@ public:
 
 	  sparse_table<uintE,bool,hash_uintE>* nAA = pbbslib::new_array_no_init<sparse_table<uintE,bool,hash_uintE>>(nC);
 	  par_for(0,n,1,[&](size_t i){nAA[i] = C.A[i];});
-	  par_for(n,nC,1,[&](size_t i){nAA[i] = make_sparse_table<uintE,bool,hash_uintE>(1,std::make_tuple(UINT_E_MAX,false),hash_uintE());});
+	  par_for(n,nC,1,[&](size_t i){nAA[i] = make_sparse_table<uintE,bool,hash_uintE>(INIT_C_SIZE,std::make_tuple(UINT_E_MAX,false),hash_uintE());});
 	  
 	  pbbslib::free_array(C.A);
 	  C.A = nAA;
@@ -138,6 +143,7 @@ public:
 		
 		long long curN = hindex - BSize + cN.A[hindex];
 		par_for(0,s.size(),[&](size_t i) {
+			cout << G -> v_data.A[s[i]].degree << " " << C.A[G -> v_data.A[s[i]].degree].m << " " << s[i] << endl;
 			C.A[G -> v_data.A[s[i]].degree].change(s[i],false);
 		});
 
@@ -279,24 +285,15 @@ public:
 
 	uintE insertVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchAddVertices(vertices);
-		auto batch = pbbs::sequence<std::pair<uintE, uintE>>(vertices.size());
-		par_for(0, vertices.size(), [&] (size_t i) {
-			batch[i] = std::make_pair(vertices[i], G->get_vertex(vertices[i]).degree);
-		});
-		resizeV(n + batch.size());
-		insert(batch);
-		return hindex;
+		return this->hindex;
 	}
 
 	uintE eraseVertices(pbbs::sequence<uintE> vertices) {
 		G -> batchRemoveVertices(vertices);
-		remove(vertices);
-		resizeV(n);
-		return hindex;
+		return this->hindex;
 	}
 
 	uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
-
 		auto aN = merge_sort(sequence<uintE>(2 * edges.size(),[&](size_t i) {
 			if(i % 2) {
 				return edges[i / 2].first;
@@ -317,19 +314,14 @@ public:
   		});
 
 		allNodes = filter(allNodes,[&](uintE i) {return (i != UINT_E_MAX);});
-		auto newNodes = filter(allNodes, [&] (uintE v) {
-			if (v < this->G->existVertices.size) return !this->G->existVertices.A[v];
-        		else return true;
-      		});
-		insertVertices(newNodes);
 		// for(int i = 0;i < allNodes.size();++i) {
 		// 	cout << allNodes[i] << " " << G -> v_data.A[allNodes[i]].degree << endl;
 		// }
 		remove(allNodes);
 		G -> batchAddEdges(edges);
-		resizeV(n + edges.size());
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
-		return hindex;
+
+		return this->hindex;
 	}
 
 	uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
@@ -359,7 +351,7 @@ public:
 		G -> batchRemoveEdges(edges);
 
 		insert(sequence<std::pair<uintE,uintE>>(allNodes.size(),[&](size_t i) {return std::make_pair(allNodes[i],G -> v_data.A[allNodes[i]].degree);}));
-		resizeV(n);
-		return hindex;
+
+		return this->hindex;
     }
 };
