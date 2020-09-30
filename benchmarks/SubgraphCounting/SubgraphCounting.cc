@@ -109,7 +109,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     }
 
-    std::cout << "Trianges: " << triangle.total << " " << t << std::endl;
+    std::cout << "Trianges: " << triangle.total << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
 
     assert(t == triangle.total);
@@ -131,7 +131,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     }
 
-    std::cout << "Trianges: " << triangle.total << " " << t << std::endl;
+    std::cout << "Trianges: " << triangle.total << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
 
     assert(t == triangle.total);

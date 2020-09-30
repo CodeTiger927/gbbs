@@ -521,6 +521,43 @@ class HSetDynArr : public HSet {
         return pbbs::sequence<uintE>(0);
       }
 
+      auto prefixSum = pbbs::sequence<uintE>(C.size - hindex - 1);
+      par_for(0, prefixSum.size(), [&] (size_t i) {
+        if (C.A[this->hindex + i + 1] != nullptr) {
+          prefixSum[i] = C.A[this->hindex + i + 1]->size;
+        }
+        else prefixSum[i] = 0;
+      });
+
+      pbbslib::scan_add_inplace(prefixSum);
+
+      par_for(0, prefixSum.size(), [&] (size_t i) {
+        prefixSum[i] += bSize;
+      });
+
+
+      pbbs::sequence<uintE> hSeq = pbbs::sequence<uintE>(hindex);
+
+      //Add everything in B
+      if (C.A[this->hindex] != nullptr && bSize != 0) {
+        par_for(0, bSize, [&] (size_t i) {
+          hSeq[i] = C.A[this->hindex]->A[i];
+        });
+      }
+
+      //Add rest of vertices
+      par_for(0, prefixSum.size(), [&] (size_t i) {
+        if (C.A[this->hindex + i + 1] != nullptr) {
+          uintE offSet = prefixSum[i];
+          par_for(0, C.A[this->hindex + i + 1]->size, [&] (size_t j) {
+            hSeq[j + offSet] = C.A[this->hindex + i + 1]->A[j];
+          });
+        }
+      });
+
+      return hSeq;
+
+      /*
       auto H = make_sparse_table<uintE, pbbs::empty,hash_uintE>(2 * this->hindex + 1 ,std::make_tuple(UINT_E_MAX, pbbs::empty()),hash_uintE());
       par_for(this->hindex + 1, C.size, [&] (size_t i) {
         if (C.A[i] != nullptr) {
@@ -544,7 +581,7 @@ class HSetDynArr : public HSet {
       });
 
       return result;
-    
+      */
     }
 
 };

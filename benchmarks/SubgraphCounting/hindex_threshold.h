@@ -565,6 +565,47 @@ class HSetThreshold : public HSet {
         return pbbs::sequence<uintE>(0);
       }
 
+      auto prefixSum = pbbs::sequence<uintE>(this->G->n - hindex - 1);
+      par_for(0, prefixSum.size(), [&] (size_t i) {
+        if (getC(this->hindex + i + 1) != nullptr) {
+          prefixSum[i] = getC(this->hindex + i + 1)->size;
+        }
+        else prefixSum[i] = 0;
+      });
+
+      pbbslib::scan_add_inplace(prefixSum);
+
+      par_for(0, prefixSum.size(), [&] (size_t i) {
+        prefixSum[i] += bSize;
+      });
+
+
+      pbbs::sequence<uintE> hSeq = pbbs::sequence<uintE>(hindex);
+
+      //Add everything in B
+      if (getC(this->hindex) != nullptr && bSize != 0) {
+        par_for(0, bSize, [&] (size_t i) {
+          hSeq[i] = getC(this->hindex)->A[i];
+        });
+      }
+
+      //Add rest of vertices
+      par_for(0, this->G->n, [&] (size_t i) {
+        if (getC(this->hindex + i + 1) != nullptr) {
+          uintE offSet = prefixSum[i];
+          par_for(0, getC(this->hindex + i + 1)->size, [&] (size_t j) {
+            hSeq[j + offSet] = getC(this->hindex + i + 1)->A[j];
+          });
+        }
+      });
+
+      return hSeq;
+
+      /*
+      if (this->hindex == 0) {
+        return pbbs::sequence<uintE>(0);
+      }
+
       auto H = make_sparse_table<uintE, pbbs::empty,hash_uintE>(2 * this->hindex + 1, std::make_tuple(UINT_E_MAX, pbbs::empty()),hash_uintE());
 
       if (threshold > 0 && this->hindex + 1 < threshold) {
@@ -600,7 +641,7 @@ class HSetThreshold : public HSet {
       });
 
       return result;
-    
+      */
     }
     
 
