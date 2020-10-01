@@ -49,6 +49,8 @@ struct TriangleCounting {
       }); 
     });
     res.size = res.capacity;
+
+    s.clear();
     return res;
   }
 
@@ -74,6 +76,7 @@ struct TriangleCounting {
     if(amount << 1 <= wedges.m && amount << 2 >= wedges.m) return;
     
     auto entries = wedges.entries();
+    wedges.del();
     pbbs::sequence<uintE> added = pbbs::sequence<uintE>(entries.size());
 
     wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(2 * amount,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
@@ -85,6 +88,8 @@ struct TriangleCounting {
       else added[i] = 0;
     });
     stored = pbbslib::reduce_add(added);
+    added.clear();
+    entries.clear();
   }
 
   // Function for debugging. Prints all the elements in H Set
@@ -127,7 +132,7 @@ struct TriangleCounting {
   }
 
   // Given a series of wedges, add them
-  void addWedges(sequence<std::pair<uintE,uintE>> seq) {
+  void addWedges(sequence<std::pair<uintE,uintE>> & seq) {
     resizeWedges(stored + seq.size());
     stored += seq.size();
 
@@ -154,7 +159,7 @@ struct TriangleCounting {
   }
 
   // Given a series of wedges, remove them
-  void removeWedges(sequence<std::pair<uintE,uintE>> seq) {
+  void removeWedges(sequence<std::pair<uintE,uintE>> & seq) {
     par_for(0,seq.size(),[&](size_t i) {
       if(i != 0) {
         if(seq[i] != seq[i - 1]) {
@@ -178,8 +183,7 @@ struct TriangleCounting {
 
 
   // After modifying the H-Sets, this function adjusts the wedges so that everything is according to the new H Set.
-  void adjustHSetWedges(sequence<uintE>& originalH, sequence<uintE>& hs,
-    sparse_table<std::pair<uintE,uintE>, bool, hash_pair>& allEdges, sparse_table<uintE,bool,hash_uintE>& originalHSet) {
+  void adjustHSetWedges(sequence<uintE>& originalH, sequence<uintE>& hs,sparse_table<std::pair<uintE,uintE>, bool, hash_pair>& allEdges, sparse_table<uintE,bool,hash_uintE>& originalHSet) {
 
     // Wedges that need to be added due to being removed form HSet
     pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> dW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(originalH.size());
@@ -209,6 +213,9 @@ struct TriangleCounting {
             }
           });
         });
+
+        es.clear();
+        specialSet.clear();
       }else{
         dW.A[i] = pbbslib::dyn_arr<std::pair<uintE,uintE>>(0);
       }
@@ -274,7 +281,6 @@ struct TriangleCounting {
 
   // Adds edges to the graph, which will also modify the H-Set and update the triangle counts
   void addEdges(sequence<std::pair<uintE,uintE>> edges) {
-
     edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset -> G -> existEdge(e.first, e.second); } );
 
     // STEP 1 - Adjust the H Set
