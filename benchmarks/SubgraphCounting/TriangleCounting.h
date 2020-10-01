@@ -2,17 +2,11 @@ struct hash_pair {
   inline size_t operator () (const std::pair<uintE,uintE> & a) {return ((pbbs::hash64(a.first) * 3) ^ (pbbs::hash64(a.second) >> 32));}
 };
 
-// TODO: You shouldn't have global variables like this. You can make it a function
-// if you'd like.
-// Converts sequences to dynamic array
-//auto seq2da = [&](sequence<std::pair<uintE,uintE>> s) -> pbbslib::dyn_arr<std::pair<uintE,uintE>> {pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size()); par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];}); res.size = s.size(); return res;};
-
 struct TriangleCounting {
   // Here is a lot of the things that need to be manually fixed
   uintE N = 1005;
 
   HSet* hset;
-  // uintE wedges[1005][1005];
   sparse_table<std::pair<uintE,uintE>,uintE,hash_pair> wedges;
   uintE stored;
 
@@ -24,10 +18,9 @@ struct TriangleCounting {
     total = 0;
     stored = 0;
 
-    wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>
-      (N,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
+    wedges = make_sparse_table<std::pair<uintE,uintE>,uintE,hash_pair>(N,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),hash_pair());
 
-    initialize(hset->G->n);
+    initialize(hset -> G -> n);
   }
 
   pbbslib::dyn_arr<std::pair<uintE, uintE>> seq2da(sequence<std::pair<uintE,uintE>> s) {
@@ -96,8 +89,8 @@ struct TriangleCounting {
 
   // Function for debugging. Prints all the elements in H Set
   void printH() {
-    for(int i = 0;i < hset->getH().size();++i) {
-      std::cout << hset->getH()[i] << " ";
+    for(int i = 0;i < hset -> getH().size();++i) {
+      std::cout << hset -> getH()[i] << " ";
     }
     std::cout << endl;
   }
@@ -186,17 +179,17 @@ struct TriangleCounting {
 
   // After modifying the H-Sets, this function adjusts the wedges so that everything is according to the new H Set.
   void adjustHSetWedges(sequence<uintE>& originalH, sequence<uintE>& hs,
-      sparse_table<std::pair<uintE,uintE>, bool, hash_pair>& allEdges, sparse_table<uintE,bool,hash_uintE>& originalHSet) {
+    sparse_table<std::pair<uintE,uintE>, bool, hash_pair>& allEdges, sparse_table<uintE,bool,hash_uintE>& originalHSet) {
 
     // Wedges that need to be added due to being removed form HSet
     pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> dW = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(originalH.size());
     dW.size = originalH.size();
     par_for(0,originalH.size(),[&](size_t i) {
       // If it was in H-Set but not anymore.
-      if(!hset->contains(originalH[i])) {
+      if(!hset -> contains(originalH[i])) {
         // Need to add wedges back
         // I need to find the nodes not in special set first
-        auto es = hset->G->v_data.A[originalH[i]].neighbors.entries();
+        auto es = hset -> G -> v_data.A[originalH[i]].neighbors.entries();
         sequence<uintE> specialSet = filter(sequence<uintE>(es.size(),[&](size_t j) {
           if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(originalH[i],std::get<0>(es[j])),false)) {
             return UINT_E_MAX;
@@ -230,7 +223,7 @@ struct TriangleCounting {
       if(!(originalHSet.find(hs[i],false))) {
         // Need to remove the wedges
         // I need to find the nodes not in special set first
-        auto es = hset->G->v_data.A[hs[i]].neighbors.entries();
+        auto es = hset -> G -> v_data.A[hs[i]].neighbors.entries();
         sequence<uintE> specialSet = pbbs::filter(sequence<uintE>(es.size(),[&](size_t j) {
           if(!std::get<1>(es[j]) || allEdges.find(std::make_pair(hs[i],std::get<0>(es[j])),false)) {
             return UINT_E_MAX;
@@ -256,39 +249,46 @@ struct TriangleCounting {
     });
 
     pbbslib::dyn_arr<std::pair<uintE,uintE>> fdW = concatSeq(dW);
-    sequence<std::pair<uintE,uintE>> all2 = merge_sort(fdW.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
-    addWedges(all2);
+    sequence<std::pair<uintE,uintE>> allA = merge_sort(fdW.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    addWedges(allA);
 
-    pbbslib::dyn_arr<std::pair<uintE,uintE>> finalRemove = concatSeq(rW);
-    sequence<std::pair<uintE,uintE>> allR = merge_sort(finalRemove.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    pbbslib::dyn_arr<std::pair<uintE,uintE>> frW = concatSeq(rW);
+    sequence<std::pair<uintE,uintE>> allR = merge_sort(frW.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     removeWedges(allR);
+
+    dW.del();
+    fdW.del();
+    allA.clear();
+    rW.del();
+    frW.del();
+    allR.clear();
   }
 
   // Initializes as a graph of n vertices(or with id of at most n - 1)
   void initialize(size_t n) {
     resizeWedges(n * n);
     sequence<uintE> nodes = sequence<uintE>(n,[&](size_t i) {return i;});
-    hset->insertVertices(nodes);
+    hset -> insertVertices(nodes);
+    nodes.clear();
   }
 
   // Adds edges to the graph, which will also modify the H-Set and update the triangle counts
   void addEdges(sequence<std::pair<uintE,uintE>> edges) {
 
-    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset->G->existEdge(e.first, e.second); } );
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset -> G -> existEdge(e.first, e.second); } );
 
     // STEP 1 - Adjust the H Set
-    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>
-        (2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
+    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
     par_for(0,edges.size(),[&](size_t i) {
       allEdges.insert(std::make_tuple(edges[i],true));
       allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
     });
-    sequence<uintE> originalH = hset->getH();
+    sequence<uintE> originalH = hset -> getH();
 
 
-    hset->insertEdges(edges);
+    hset -> insertEdges(edges);
 
-    sequence<uintE> hs = hset->getH();
+    sequence<uintE> hs = hset -> getH();
 
     auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
@@ -323,8 +323,8 @@ struct TriangleCounting {
       // Case 1, added by wedges
       wT.A[i] = wedges.find(std::make_pair(v,u),0);
 
-      if(!hset->contains(v)) {
-        auto edgesV = hset->G->v_data.A[v].neighbors.entries();
+      if(!hset -> contains(v)) {
+        auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
 
         pbbslib::dyn_arr<uintE> aTv = pbbslib::dyn_arr<uintE>(edgesV.size());
 
@@ -347,30 +347,30 @@ struct TriangleCounting {
             tWv.A[2 * i + 1] = std::make_pair(next,u);
           }
 
-          if(hset->G->existEdge(v,next) && hset->G->existEdge(next,u)) {
+          if(hset -> G -> existEdge(v,next) && hset -> G -> existEdge(next,u)) {
             // A triangle!
             if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(std::make_pair(u,next),false))) {
               // (u,v) and (v,next) are added edges but not (next,u).
               // Possible cases are 2 and 3
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTv.A[i] = 3;
-              }else if(hset->contains(v) && !hset->contains(u) && !hset->contains(next)){
+              }else if(hset -> contains(v) && !hset -> contains(u) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTv.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && !(allEdges.find(std::make_pair(v,next),false))) {
               // (u,v) and (u,next) are added edges but not (v,next).
               // same with above
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTv.A[i] = 3;
-              }else if(hset->contains(u) && !hset->contains(v) && !hset->contains(next)){
+              }else if(hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTv.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 8, 3 added edges and no nodes in h-set
                 aTv.A[i] = 2;
               }
@@ -385,10 +385,13 @@ struct TriangleCounting {
         }));
         aTv.size = aTv.capacity;
         aT.A[i] = pbbs::reduce(aTv.to_seq(),pbbs::addm<uintE>());
+
+        aTv.del();
+        tWv.del();
       }
 
-      if(!hset->contains(u)) {
-        auto edgesU = hset->G->v_data.A[u].neighbors.entries();
+      if(!hset -> contains(u)) {
+        auto edgesU = hset -> G -> v_data.A[u].neighbors.entries();
 
 
         pbbslib::dyn_arr<uintE> aTu = pbbslib::dyn_arr<uintE>(edgesU.size());
@@ -414,15 +417,15 @@ struct TriangleCounting {
             tWu.A[2 * i + 1] = std::make_pair(next,v);
           }
 
-          if(hset->G->existEdge(next,u) && hset->G->existEdge(next,v)) {
+          if(hset -> G -> existEdge(next,u) && hset -> G -> existEdge(next,v)) {
             // A triangle!
             if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(std::make_pair(u,next),false))) {
               // (u,v) and (v,next) are added edges but not (next,u).
               // Possible cases are 2 and 3
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTu.A[i] = 3;
-              }else if(hset->contains(v) && !hset->contains(u) && !hset->contains(next)){
+              }else if(hset -> contains(v) && !hset -> contains(u) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTu.A[i] = 6;
               }
@@ -430,15 +433,15 @@ struct TriangleCounting {
               // (u,v) and (u,next) are added edges but not (v,next)/
               // same with above
 
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTu.A[i] = 3;
-              }else if(hset->contains(u) && !hset->contains(v) && !hset->contains(next)){
+              }else if(hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTu.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 8, 3 added edges and no nodes in h-set
                 aTu.A[i] = 2;
               }
@@ -454,6 +457,9 @@ struct TriangleCounting {
         }));
         aTu.size = aTu.capacity;
         aT.A[i] += pbbs::reduce(aTu.to_seq(),pbbs::addm<uintE>());
+
+        aTu.del();
+        tWu.del();
       }
     });
 
@@ -470,14 +476,14 @@ struct TriangleCounting {
         uvhT.A[j] = 0;
         int next = hs[j];
         if(u == next || v == next) return;
-        if(hset->G->existEdge(u,next) && hset->G->existEdge(v,next)) {
+        if(hset -> G -> existEdge(u,next) && hset -> G -> existEdge(v,next)) {
           // Triangle!
           // I decided to this instead, since if i do case work, there would be like 26 if statements
           int counter = 1;
-          if(allEdges.find(std::make_pair(next,u),false) && hset->contains(v)) {
+          if(allEdges.find(std::make_pair(next,u),false) && hset -> contains(v)) {
             counter++;
           }
-          if(allEdges.find(std::make_pair(v,next),false) && hset->contains(u)) {
+          if(allEdges.find(std::make_pair(v,next),false) && hset -> contains(u)) {
             counter++;
           }
           uvhT.A[j] = 6 / counter;
@@ -492,27 +498,35 @@ struct TriangleCounting {
     tW.size = tW.capacity;
     wT.size = wT.capacity;
     total += pbbs::reduce(wT.to_seq(),pbbs::addm<uintE>());
+    wT.del();
 
     aT.size = aT.capacity;
     total += pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) / 12;
+    aT.del();
 
     hT.size = hT.capacity;
     total += pbbs::reduce(hT.to_seq(),pbbs::addm<uintE>()) / 6;
+    hT.del();
 
     // STEP 4
 
     pbbslib::dyn_arr<std::pair<uintE,uintE>> finalAdd = concatSeq(tW);
-
     sequence<std::pair<uintE,uintE>> all = merge_sort(finalAdd.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     addWedges(all);
-
+    tW.del();
+    finalAdd.del();
+    all.clear();
+    allEdges.del();
+    originalH.clear();
+    hs.clear();
+    originalHSet.del();
   }
 
 
   // Removes edges from the graph, which will also modify the H-Set and update the triangle counts
   void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
 
-    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return hset->G->existEdge(e.first, e.second); } );
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return hset -> G -> existEdge(e.first, e.second); } );
 
     auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>
         (2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
@@ -521,7 +535,7 @@ struct TriangleCounting {
       allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
     });
 
-    sequence<uintE> originalH = hset->getH();
+    sequence<uintE> originalH = hset -> getH();
 
     // triangles removed by wedges
     pbbslib::dyn_arr<uintE> wT = pbbslib::dyn_arr<uintE>(edges.size());
@@ -547,8 +561,8 @@ struct TriangleCounting {
       // Case 1, removed by wedges
       wT.A[i] = wedges.find(std::make_pair(v,u), 0);
 
-      if(!hset->contains(v)) {
-        auto edgesV = hset->G->v_data.A[v].neighbors.entries();
+      if(!hset -> contains(v)) {
+        auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
 
         pbbslib::dyn_arr<uintE> aTv = pbbslib::dyn_arr<uintE>(edgesV.size());
 
@@ -570,30 +584,30 @@ struct TriangleCounting {
             tWv.A[2 * i + 1] = std::make_pair(next,u);
           }
 
-          if(hset->G->existEdge(v,next) && hset->G->existEdge(next,u)) {
+          if(hset -> G -> existEdge(v,next) && hset -> G -> existEdge(next,u)) {
             // A triangle!
             if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(std::make_pair(u,next),false))) {
               // (u,v) and (v,next) are added edges but not (next,u).
               // Possible cases are 2 and 3
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTv.A[i] = 3;
-              }else if(hset->contains(v) && !hset->contains(u) && !hset->contains(next)){
+              }else if(hset -> contains(v) && !hset -> contains(u) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTv.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && !(allEdges.find(std::make_pair(v,next),false))) {
               // (u,v) and (u,next) are added edges but not (v,next).
               // same with above
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTv.A[i] = 3;
-              }else if(hset->contains(u) && !hset->contains(v) && !hset->contains(next)){
+              }else if(hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTv.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 8, 3 added edges and no nodes in h-set
                 aTv.A[i] = 4;
               }
@@ -608,10 +622,13 @@ struct TriangleCounting {
         }));
         aTv.size = aTv.capacity;
         aT.A[i] = pbbs::reduce(aTv.to_seq(),pbbs::addm<uintE>());
+
+        aTv.del();
+        tWv.del();
       }
 
-      if(!hset->contains(u)) {
-        auto edgesU = hset->G->v_data.A[u].neighbors.entries();
+      if(!hset -> contains(u)) {
+        auto edgesU = hset -> G -> v_data.A[u].neighbors.entries();
 
 
         pbbslib::dyn_arr<uintE> aTu = pbbslib::dyn_arr<uintE>(edgesU.size());
@@ -636,30 +653,30 @@ struct TriangleCounting {
             tWu.A[2 * i + 1] = std::make_pair(next,v);
           }
 
-          if(hset->G->existEdge(v,next) && hset->G->existEdge(next,u)) {
+          if(hset -> G -> existEdge(v,next) && hset -> G -> existEdge(next,u)) {
             // A triangle!
             if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(std::make_pair(u,next),false))) {
               // (u,v) and (v,next) are added edges but not (next,u).
               // Possible cases are 2 and 3
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTu.A[i] = 3;
-              }else if(hset->contains(v) && !hset->contains(u) && !hset->contains(next)){
+              }else if(hset -> contains(v) && !hset -> contains(u) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTu.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && !(allEdges.find(std::make_pair(v,next),false))) {
               // (u,v) and (u,next) are added edges but not (v,next).
               // same with above
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 2, 2 added edges and no h-set
                 aTu.A[i] = 3;
-              }else if(hset->contains(u) && !hset->contains(v) && !hset->contains(next)){
+              }else if(hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)){
                 // Case 3, 2 added edges and joint node is in h-set
                 aTu.A[i] = 6;
               }
             }else if(allEdges.find(std::make_pair(u,next),false) && allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset->contains(u) && !hset->contains(v) && !hset->contains(next)) {
+              if(!hset -> contains(u) && !hset -> contains(v) && !hset -> contains(next)) {
                 // Case 8, 3 added edges and no nodes in h-set
                 aTu.A[i] = 4;
               }
@@ -675,6 +692,9 @@ struct TriangleCounting {
         }));
         aTu.size = aTu.capacity;
         aT.A[i] += pbbs::reduce(aTu.to_seq(),pbbs::addm<uintE>());
+
+        aTu.del();
+        tWu.del();
       }
     });
 
@@ -689,22 +709,22 @@ struct TriangleCounting {
       par_for(0,originalH.size(),[&](size_t j) {
         uvhT.A[j] = 0;
         int next = originalH[j];
-        if(hset->G->existEdge(u,next) && hset->G->existEdge(v,next)) {
+        if(hset -> G -> existEdge(u,next) && hset -> G -> existEdge(v,next)) {
           // Triangle!
           // I decided to this instead, since if i do case work, there would be like 26 if statements
           // TODO: What is the meaning of these counters?
           int counter = 1;
           int counter2 = -1;
-          if(allEdges.find(std::make_pair(u,next),false) && hset->contains(v)) {
+          if(allEdges.find(std::make_pair(u,next),false) && hset -> contains(v)) {
             counter++;
           }
-          if(allEdges.find(std::make_pair(v,next),false) && hset->contains(u)) {
+          if(allEdges.find(std::make_pair(v,next),false) && hset -> contains(u)) {
             counter++;
           }
-          if(allEdges.find(std::make_pair(u,next),false) && !hset->contains(v)) {
+          if(allEdges.find(std::make_pair(u,next),false) && !hset -> contains(v)) {
             counter2++;
           }
-          if(allEdges.find(std::make_pair(v,next),false) && !hset->contains(u)) {
+          if(allEdges.find(std::make_pair(v,next),false) && !hset -> contains(u)) {
             counter2++;
           }
           uvhT.A[j] = 6 * counter2 / counter;
@@ -719,16 +739,19 @@ struct TriangleCounting {
     tW.size = tW.capacity;
     wT.size = wT.capacity;
     total -= pbbs::reduce(wT.to_seq(),pbbs::addm<uintE>());
+    wT.del();
     aT.size = aT.capacity;
     total += pbbs::reduce(aT.to_seq(),pbbs::addm<uintE>()) / 12;
+    aT.del();
     hT.size = hT.capacity;
     total += pbbs::reduce(hT.to_seq(),pbbs::addm<long long>()) / 6;
+    hT.del();
 
     // STEP 4 - Updates the HSet and the wedges
 
-    hset->eraseEdges(edges);
+    hset -> eraseEdges(edges);
 
-    sequence<uintE> hs = hset->getH();
+    sequence<uintE> hs = hset -> getH();
 
     auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
@@ -740,5 +763,12 @@ struct TriangleCounting {
     sequence<std::pair<uintE,uintE>> allR = merge_sort(finalRemove.to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     removeWedges(allR);
     adjustHSetWedges(originalH,hs,allEdges,originalHSet); 
+    tW.del();
+    finalRemove.del();
+    allR.clear();
+    allEdges.del();
+    originalH.clear();
+    hs.clear();
+    originalHSet.del();
   }
 };

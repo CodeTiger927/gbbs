@@ -223,63 +223,37 @@ struct dynamic_symmetric_graph {
 
     // Using merge sort for stability, as it guarentees NlogN work regardless of data specifics.
     sequence<std::pair<uintE,uintE>> all = merge_sort(allS,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.first < b.first;});
-    sequence<size_t> idx = pbbs::sequence<size_t>(all.size());
 
-    par_for(0, all.size(), [&] (size_t i) {
-      idx[i] = i;
-    });
-
-    auto f = [&] (size_t i) { return i == all.size() - 1 || all[i].first != all[i + 1].first; };
-    auto indices = pbbs::filter(idx, f);
-    idx.clear();
-
-    //Uses indices sequence to know the index of last entry for each clustered deg
-    par_for(0, indices.size(), [&] (size_t i) {
-      size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
-      size_t end = indices[i] + 1;
-
-      pbbs::sequence<std::pair<uintE, uintE>> extra = all.slice(start, end);
-      uintE v = extra[0].first;
-      v_data.A[v].degree += extra.size();
-      v_data.A[v].stored += extra.size();
-      adjustNeighbors(v);
-      par_for(0, extra.size(), [&] (size_t j) {
-        v_data.A[v].neighbors.insert(std::make_tuple(extra[j].second, true));
-      });
-
-      extra.clear();
-    });
-    indices.clear();
-
-    /*
-    auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * all.size() + 1,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       if(i != 0) {
         if(cur.first != all[i - 1].first) {
-          start.insert(std::make_tuple(cur.first,i));
           v_data.A[all[i - 1].first].degree += i;
           v_data.A[all[i - 1].first].stored += i;
         }
       }
     });
-    // cout << start.m << endl;
-    start.insert(std::make_tuple(all[0].first,0));
-    v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
-    v_data.A[all[2 * ds.size() - 1].first].stored += 2 * ds.size();
-    auto entries = start.entries();
-    par_for(0,entries.size(),[&](size_t i) {
-      uintE cur = std::get<0>(entries[i]);
-      if (cur >= v_data.size) return;
-      v_data.A[cur].degree -= std::get<1>(entries[i]);
-      v_data.A[cur].stored -= std::get<1>(entries[i]);
-      adjustNeighbors(cur);
+    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
+    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].stored += 2 * ds.size();
+    par_for(0,all.size(),[&](size_t i) {
+      std::pair<uintE,uintE> cur = all[i];
+      if(i != 0) {
+        if(cur.first != all[i - 1].first) {
+          v_data.A[cur.first].degree -= i;
+          v_data.A[cur.first].stored -= i;
+          adjustNeighbors(cur.first);
+        }
+      }
     });
+
+    if(all.size() > 0) adjustNeighbors(all[0].first);
+
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       v_data.A[cur.first].neighbors.insert(std::make_tuple(cur.second,true));
     });
-  */
+  
   }
 
   // Remove multiple vertices in parallel
@@ -343,57 +317,28 @@ struct dynamic_symmetric_graph {
 
     // Using merge sort for stability, as it guarentees NlogN work regardless of data specifics.
     sequence<std::pair<uintE,uintE>> all = merge_sort(allS,[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a.first < b.first; });
-
-    sequence<size_t> idx = pbbs::sequence<size_t>(all.size());
-
-    par_for(0, all.size(), [&] (size_t i) {
-      idx[i] = i;
-    });
-
-    auto f = [&] (size_t i) { return i == all.size() - 1 || all[i].first != all[i + 1].first; };
-    auto indices = pbbs::filter(idx, f);
-    idx.clear();
-
-    //Uses indices sequence to know the index of last entry for each clustered deg
-    par_for(0, indices.size(), [&] (size_t i) {
-      size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
-      size_t end = indices[i] + 1;
-
-      pbbs::sequence<std::pair<uintE, uintE>> extra = all.slice(start, end);
-      uintE v = extra[0].first;
-      v_data.A[v].degree -= extra.size();
-
-      par_for(0, extra.size(), [&] (size_t j) {
-        v_data.A[v].neighbors.change(extra[j].second, false);
-      });
-      adjustNeighbors(v);
-
-      extra.clear();
-    });
-    indices.clear();
-
-    /*
-    auto start = make_sparse_table<uintE,uintE,hash_uintE>(2 * all.size() + 1,std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+    
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       v_data.A[cur.first].neighbors.change(cur.second,false);
       if(i != 0) {
         if(cur.first != all[i - 1].first) {
-          start.insert(std::make_tuple(cur.first,i));
           v_data.A[all[i - 1].first].degree -= i;
         }
       }
     });
-    start.insert(std::make_tuple(all[0].first,0));
-    v_data.A[all[2 * ds.size() - 1].first].degree -= 2 * ds.size();
-    auto entries = start.entries();
-    par_for(0,entries.size(),[&](size_t i) {
-      uintE cur = std::get<0>(entries[i]);
-      v_data.A[cur].degree += std::get<1>(entries[i]);
-      adjustNeighbors(cur);
-    });
-    */
+    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].degree -= 2 * ds.size();
+    if(all.size() > 0) adjustNeighbors(all[0].first);
 
+    par_for(0,all.size(),[&](size_t i) {
+      std::pair<uintE,uintE> cur = all[i];
+      if(i != 0) {
+        if(cur.first != all[i - 1].first) {
+          v_data.A[cur.first].degree += i;
+          adjustNeighbors(cur.first);
+        }
+      }
+    });
   }
 };
 
