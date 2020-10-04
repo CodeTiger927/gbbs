@@ -48,7 +48,87 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE,
 
 //e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 "inputs/graph_test_3.txt"
 
+template <class Graph>
+double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
+  long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
+  long size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
+
+  std::cout << "### Application: Subgraph Counting" << std::endl;
+  std::cout << "### Graph: " << P.getArgument(0) << std::endl;
+  std::cout << "### Threads: " << num_workers() << std::endl;
+  std::cout << "### n: " << GA.n << std::endl;
+  std::cout << "### m: " << GA.m << std::endl;
+  std::cout << "### Params: -type = " << type << std::endl;
+  std::cout << "### ------------------------------------" << endl;
+
+  assert(P.getOption("-s"));
+  assert(type < 2); //Valid option (will increase as there are more options)
+
+  timer clock;
+  
+  auto _dynG = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex, pbbs::empty>();
+  HSet* h;
+
+  if (type == 0) {
+    h = new HSetDynArr(&_dynG);
+    std::cout << "DYN_ARR VERSION\n" << std::endl;
+  }
+  else if (type == 1) {
+    h = new HSetThreshold(&_dynG, GA.n);
+
+    std::cout << "THRESHOLD VERSION\n" << std::endl;
+  }
+
+  TriangleCounting triangle = TriangleCounting(h);
+
+  pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
+  par_for(0, GA.n, [&] (size_t i) {
+    degrees[i] = GA.get_vertex(i).degree;
+  });
+
+  uintE maxDeg = pbbslib::reduce_max(degrees);
+
+  for (long idx = 0; idx < maxDeg; idx++) {
+
+    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
+    par_for(0, GA.n, [&] (size_t i) {
+      if (GA.get_vertex(i).degree > 0) {
+        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
+      }
+      else {
+        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+      }
+    });
+
+    triangle.addEdges(getEdges(batch));
+    if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+  }
+
+  cout << "TOTAL: " << triangle.total << endl;
+
+  for (long idx = 0; idx < maxDeg; idx++) {
+
+    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
+    par_for(0, GA.n, [&] (size_t i) {
+      if (GA.get_vertex(i).degree > 0) {
+        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
+      }
+      else {
+        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+      }
+    });
+
+    triangle.removeEdges(getEdges(batch));
+    if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+  }
+
+  cout << "TOTAL: " << triangle.total << endl;
+
+  return 0;
+}
+
+/* RANDOM EDGE RUNNER
 template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
@@ -79,10 +159,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   else if (type == 1) {
     h = new HSetThreshold(&_dynG, GA.n);
     std::cout << "THRESHOLD VERSION\n" << std::endl;
-  }
-  else if (type == 2) {
-    std::cout << "SPARSE_TABLE VERSION\n" << std::endl;
-    h = new HSetSparseTable(&_dynG, 10005);
   }
 
   TriangleCounting triangle = TriangleCounting(h);
@@ -144,5 +220,5 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   return 0;
 }
-
+*/
 generate_symmetric_main(AppSubgraphCounting_runner, false);
