@@ -101,8 +101,10 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     });
 
+    clock.start();
     triangle.addEdges(getEdges(batch));
-    if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+    clock.stop();
+    //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
 
   cout << "TOTAL: " << triangle.total << endl;
@@ -119,11 +121,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     });
 
+    clock.start();
     triangle.removeEdges(getEdges(batch));
-    if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+    clock.stop();
+    //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
 
   cout << "TOTAL: " << triangle.total << endl;
+  cout << "TIME: " << clock.get_total() << endl;
 
   return 0;
 }
