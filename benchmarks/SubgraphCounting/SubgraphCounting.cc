@@ -65,7 +65,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   assert(P.getOption("-s"));
   assert(type < 2); //Valid option (will increase as there are more options)
 
-  timer clock;
+  timer insertion;
+  timer insertionTotal;
+  timer deletion;
+  timer deletionTotal;
+
+  timer triangleTime;
+  timer totalTime;
+  
   
   auto _dynG = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex, pbbs::empty>();
   HSet* h;
@@ -82,6 +89,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   TriangleCounting triangle = TriangleCounting(h);
 
+  //Add all edges from static graph
   pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
   par_for(0, GA.n, [&] (size_t i) {
     degrees[i] = GA.get_vertex(i).degree;
@@ -101,34 +109,52 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     });
 
-    clock.start();
     triangle.addEdges(getEdges(batch));
-    clock.stop();
     //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
 
-  cout << "TOTAL: " << triangle.total << endl;
 
-  for (long idx = 0; idx < maxDeg; idx++) {
+  totalTime.start();
+  insertionTotal.start();
 
-    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
-    par_for(0, GA.n, [&] (size_t i) {
-      if (GA.get_vertex(i).degree > 0) {
-        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
-      }
-      else {
-        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
-      }
-    });
+  //Add random edges
+  for (int i = 0; i < 10; i++) {
+    //Random number of vertices between 10^3 to 10^5, each with 100 edges
+    auto batch = barabasi_albert::generate_updates(1000 + rand() % (100000 - 1000), 100);
 
-    clock.start();
+    triangleTime.start();
+    insertion.start();
+    triangle.addEdges(getEdges(batch));
+    insertion.stop();
+    triangleTime.start();
+  }
+  insertionTotal.stop();
+  cout << "Triangles: " << triangle.total << endl;
+
+  deletionTotal.start();
+  
+  //Delete random edges
+  for (int i = 0; i < 10; i++) {
+    //Random number of vertices between 10^3 to 10^5, each with 100 edges
+    auto batch = barabasi_albert::generate_updates(1000 + rand() % (100000 - 1000), 100);
+
+    triangleTime.start();
+    deletion.start();
     triangle.removeEdges(getEdges(batch));
-    clock.stop();
-    //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+    deletion.stop();
+    triangleTime.start();
   }
+  deletionTotal.stop();
+  totalTime.stop();
 
-  cout << "TOTAL: " << triangle.total << endl;
-  cout << "TIME: " << clock.get_total() << endl;
+  cout << "Triangles: " << triangle.total << endl;
+
+  cout << "Actual Insertion Time: " << insertion.get_total() << endl;
+  cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
+  cout << "Actual Deletion Time: " << insertion.get_total() << endl;
+  cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
+  cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
+  cout << "Total Time: " << totalTime.get_total() << endl;
 
   return 0;
 }
