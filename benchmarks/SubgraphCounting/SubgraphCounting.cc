@@ -128,7 +128,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     insertion.start();
     triangle.addEdges(getEdges(batch));
     insertion.stop();
-    triangleTime.start();
+    triangleTime.stop();
   }
   insertionTotal.stop();
   cout << "Triangles: " << triangle.total << endl;
@@ -145,7 +145,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     deletion.start();
     triangle.removeEdges(getEdges(batch));
     deletion.stop();
-    triangleTime.start();
+    triangleTime.stop();
   }
   deletionTotal.stop();
   totalTime.stop();
