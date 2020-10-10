@@ -113,12 +113,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
 
+  cout << "Static Graph Complete" << endl;
 
   totalTime.start();
   insertionTotal.start();
 
   //Add random edges
   for (int i = 0; i < 10; i++) {
+    cout << "Batch " << (i + 1) << endl;
     //Random number of vertices between 10^3 to 10^5, each with 100 edges
     auto batch = barabasi_albert::generate_updates(1000 + rand() % (100000 - 1000), 100);
 
@@ -135,6 +137,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   
   //Delete random edges
   for (int i = 0; i < 10; i++) {
+    cout << "Batch " << (i + 11) << endl;
     //Random number of vertices between 10^3 to 10^5, each with 100 edges
     auto batch = barabasi_albert::generate_updates(1000 + rand() % (100000 - 1000), 100);
 
