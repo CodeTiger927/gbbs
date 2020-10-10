@@ -88,7 +88,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   }
 
   TriangleCounting triangle = TriangleCounting(h);
-
+/*
   //Add all edges from static graph
   pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
   par_for(0, GA.n, [&] (size_t i) {
@@ -114,7 +114,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   }
 
   cout << "Static Graph Complete" << endl;
-
+*/
   totalTime.start();
   insertionTotal.start();
 
