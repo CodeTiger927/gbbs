@@ -124,10 +124,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = barabasi_albert::generate_updates(100 + rand() % (1000 - 100), 100);
 
-    for (int i = 0; i < batch.size(); i++) {
-      cout << std::get<0>(batch[i]) << " -- " << std::get<1>(batch[i]) << endl;
-    }
-
     triangleTime.start();
     insertion.start();
     triangle.addEdges(getEdges(batch));
