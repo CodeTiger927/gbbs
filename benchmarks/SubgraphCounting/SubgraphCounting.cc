@@ -163,8 +163,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
   cout << "Total Time: " << totalTime.get_total() << endl;
 
-  h->G->del();
+  par_for(0, h->G->n, [&] (size_t i) {
+    if (existVertices.A[i]) pbbslib::free_array(h->G->v_data.A[i].neighbors.table);
+  });
+
+  pbbslib::free_array(h->G->v_data.A);
+  pbbslib::free_array(h->G->existVertices.A);
   pbbslib::free_array(triangle.wedges.table);
+  
 
   return 0;
 }
