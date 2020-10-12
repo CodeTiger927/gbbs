@@ -159,6 +159,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
   cout << "Total Time: " << totalTime.get_total() << endl;
 
+  h->G->del();
+
   return 0;
 }
 
