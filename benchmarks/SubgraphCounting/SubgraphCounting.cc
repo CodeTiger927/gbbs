@@ -109,6 +109,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     });
 
+    batch.clear();
+
     //triangle.addEdges(getEdges(batch));
     //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
@@ -129,6 +131,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     triangle.addEdges(batch);
     insertion.stop();
     triangleTime.stop();
+    batch.clear();
   }
   insertionTotal.stop();
   cout << "Triangles: " << triangle.total << endl;
@@ -146,6 +149,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     triangle.removeEdges(batch);
     deletion.stop();
     triangleTime.stop();
+    batch.clear();
   }
   deletionTotal.stop();
   totalTime.stop();
@@ -160,6 +164,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   cout << "Total Time: " << totalTime.get_total() << endl;
 
   h->G->del();
+  pbbslib::free_array(triangle.wedges.table);
 
   return 0;
 }

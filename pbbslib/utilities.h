@@ -74,8 +74,8 @@ void* aligned_alloc(size_t a, size_t n) {return malloc(n);}
 #include <malloc.h>
 struct __mallopt {
   __mallopt() {
-    mallopt(M_MMAP_MAX,0);
-    mallopt(M_TRIM_THRESHOLD,-1);
+    //mallopt(M_MMAP_MAX,0);
+    //mallopt(M_TRIM_THRESHOLD,-1);
   }
 };
 
