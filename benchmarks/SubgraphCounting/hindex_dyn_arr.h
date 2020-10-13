@@ -516,6 +516,13 @@ class HSetDynArr : public HSet {
       return false;
     }
 
+    void del() {
+      par_for(0, C.size, [&] (size_t i) {
+        if (C.A[i] != nullptr) pbbslib::free_array(C.A[i]->A);
+      });
+      pbbslib::free_array(C.A);
+    }
+
     pbbs::sequence<uintE> getH() {
       if (this->hindex == 0) {
         return pbbs::sequence<uintE>(0);

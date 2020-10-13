@@ -560,6 +560,20 @@ class HSetThreshold : public HSet {
     }
 
     
+    void del() {
+      auto highCEntries = highC.entries();
+      par_for(0, highCEntries.size(), [&] (size_t i) {
+        pbbslib::free_array(std::get<1>(highCEntries[i])->A);
+      });
+      pbbslib::free_array(highC.table);
+
+      par_for(0, lowC.size, [&] (size_t i) {
+        if (lowC.A[i] != nullptr) pbbslib::free_array(lowC.A[i]->A);
+      });
+      pbbslib::free_array(lowC.A);
+    }
+
+    
     pbbs::sequence<uintE> getH() {
       if (this->hindex == 0) {
         return pbbs::sequence<uintE>(0);
