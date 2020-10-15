@@ -115,6 +115,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   //   degrees[i] = GA.get_vertex(i).degree;
   // });
 
+<<<<<<< HEAD
   // uintE maxDeg = pbbslib::reduce_max(degrees);
 
   // for (long idx = 0; idx < maxDeg; idx++) {
@@ -131,6 +132,12 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   //   batch.clear();
   // }
+=======
+    triangle.addEdges(getEdges(batch));
+    batch.clear();
+    //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+  }
+>>>>>>> 9daf16af296881287eb20db75ac6fddd36a3ee69
 
 
   totalTime.start();
@@ -180,8 +187,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
   cout << "Total Time: " << totalTime.get_total() << endl;
 
-  h->del();
-
   par_for(0, h->G->n, [&] (size_t i) {
     if (h->G->existVertices.A[i]) pbbslib::free_array(h->G->v_data.A[i].neighbors.table);
   });
@@ -189,6 +194,12 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   pbbslib::free_array(h->G->v_data.A);
   pbbslib::free_array(h->G->existVertices.A);
   pbbslib::free_array(triangle.wedges.table);
+<<<<<<< HEAD
+=======
+  
+  h->del();
+
+>>>>>>> 9daf16af296881287eb20db75ac6fddd36a3ee69
 
   return 0;
 }
