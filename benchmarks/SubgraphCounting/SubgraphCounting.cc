@@ -12,8 +12,9 @@
 #include <fstream>
 #include <stdlib.h>
 #include <assert.h>
+#include <vector>
 
-pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) {
+pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE, uintE>>& edges) {
 
   auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>(edges.size(), [&] (size_t i) {
     if (edges[i].first > edges[i].second) return std::make_pair(edges[i].second, edges[i].first);
@@ -87,51 +88,67 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
 
+  srand(0);
   TriangleCounting triangle = TriangleCounting(h);
+  triangle.initialize(500005);
 
-  //Add all edges from static graph
-  pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
-  par_for(0, GA.n, [&] (size_t i) {
-    degrees[i] = GA.get_vertex(i).degree;
-  });
+  std::vector<std::pair<uintE,uintE>> insertBatchtmp[100],removeBatchtmp[100];
 
-  uintE maxDeg = pbbslib::reduce_max(degrees);
-
-  for (long idx = 0; idx < maxDeg; idx++) {
-
-    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
-    par_for(0, GA.n, [&] (size_t i) {
-      if (GA.get_vertex(i).degree > 0) {
-        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
-      }
-      else {
-        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
-      }
-    });
-
-    batch.clear();
-
-    triangle.addEdges(getEdges(batch));
-    //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
+  for(int i = 0;i < GA.n;++i) {
+    for(int j = 0;j < GA.get_vertex(i).degree;++j) {
+      uintE cur = GA.get_vertex(i).getOutNeighbor(j);
+      if(cur < i) continue;
+      insertBatchtmp[random() % 100].push_back(std::make_pair(i,cur));
+      removeBatchtmp[random() % 100].push_back(std::make_pair(i,cur));
+    }
   }
 
-  cout << "Triangles: " << triangle.total << endl;
+  sequence<std::pair<uintE,uintE>> insertBatch[100],removeBatch[100];
+  for(int i = 0;i < 100;++i) {
+    insertBatch[i] = pbbslib::make_sequence<std::pair<uintE,uintE>>(insertBatchtmp[i].size(),[&](size_t j) {return insertBatchtmp[i][j];});
+    removeBatch[i] = pbbslib::make_sequence<std::pair<uintE,uintE>>(removeBatchtmp[i].size(),[&](size_t j) {return removeBatchtmp[i][j];});
+  }
+
+  //Add all edges from static graph
+  // pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
+  // par_for(0, GA.n, [&] (size_t i) {
+  //   degrees[i] = GA.get_vertex(i).degree;
+  // });
+
+  // uintE maxDeg = pbbslib::reduce_max(degrees);
+
+  // for (long idx = 0; idx < maxDeg; idx++) {
+
+  //   pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
+  //   par_for(0, GA.n, [&] (size_t i) {
+  //     if (GA.get_vertex(i).degree > 0) {
+  //       batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
+  //     }
+  //     else {
+  //       batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+  //     }
+  //   });
+
+  //   batch.clear();
+  // }
+
 
   totalTime.start();
   insertionTotal.start();
 
   //Add random edges
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 100; i++) {
     cout << "Batch " << (i + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
-    auto batch = getEdges(barabasi_albert::generate_updates(1000, 100));
+    // auto batch = getEdges(barabasi_albert::generate_updates(1000, 100));
 
     triangleTime.start();
     insertion.start();
-    triangle.addEdges(batch);
+    triangle.addEdges(insertBatch[i]);
     insertion.stop();
     triangleTime.stop();
-    batch.clear();
+    // batch.clear();
+    cout << "Triangles: " << triangle.total << endl;
   }
   insertionTotal.stop();
   cout << "Triangles: " << triangle.total << endl;
@@ -139,17 +156,17 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   deletionTotal.start();
   
   //Delete random edges
-  for (int i = 0; i < 10; i++) {
-    cout << "Batch " << (i + 11) << endl;
+  for (int i = 0; i < 100; i++) {
+    cout << "Batch " << (i + 101) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
-    auto batch = getEdges(barabasi_albert::generate_updates(1000, 100));
+    // auto batch = getEdges(barabasi_albert::generate_updates(1000, 100));
 
     triangleTime.start();
     deletion.start();
-    triangle.removeEdges(batch);
+    triangle.removeEdges(removeBatch[i]);
     deletion.stop();
     triangleTime.stop();
-    batch.clear();
+    // batch.clear();
   }
   deletionTotal.stop();
   totalTime.stop();
@@ -172,7 +189,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   pbbslib::free_array(h->G->v_data.A);
   pbbslib::free_array(h->G->existVertices.A);
   pbbslib::free_array(triangle.wedges.table);
-  
 
   return 0;
 }
