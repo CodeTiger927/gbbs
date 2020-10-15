@@ -109,9 +109,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       }
     });
 
-    batch.clear();
-
     triangle.addEdges(getEdges(batch));
+    batch.clear();
     //if (idx % (maxDeg / 10) == 0) cout << "Triangles: " << triangle.total << endl;
   }
 
