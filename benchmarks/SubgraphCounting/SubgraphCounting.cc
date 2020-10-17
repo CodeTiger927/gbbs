@@ -99,6 +99,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
+  /*
   std::vector<std::pair<uintE,uintE>> insertBatchtmp;
 
   for(int i = 0;i < GA.n;++i) {
@@ -117,6 +118,33 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   staticTime.start();
   triangle.addEdges(insertBatch);
   staticTime.stop();
+  */
+
+   //Add all edges from static graph
+  pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
+  par_for(0, GA.n, [&] (size_t i) {
+    degrees[i] = GA.get_vertex(i).degree;
+  });
+  uintE maxDeg = pbbslib::reduce_max(degrees);
+  for (long idx = 0; idx < maxDeg; idx++) {
+
+    cout << idx << " out of " << maxDeg << endl;
+
+    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
+    par_for(0, GA.n, [&] (size_t i) {
+      if (GA.get_vertex(i).degree > 0) {
+        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
+      }
+      else {
+        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+      }
+    });
+    staticTime.start();
+    triangle.addEdges(getEdges(batch));
+    staticTime.stop();
+    batch.clear();
+  }
+
   std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
 
   insertionTotal.start();
