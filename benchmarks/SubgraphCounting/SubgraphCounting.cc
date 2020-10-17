@@ -60,7 +60,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "### Threads: " << num_workers() << std::endl;
   std::cout << "### n: " << GA.n << std::endl;
   std::cout << "### m: " << GA.m << std::endl;
-  std::cout << "### Params: -type = " << type << std::endl;
+  std::cout << "### Params: -type = " << type << " -size = " << size << std::endl;
   std::cout << "### ------------------------------------" << endl;
 
   assert(P.getOption("-s"));
@@ -122,7 +122,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   insertionTotal.start();
 
   //Add random edges
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < size; i++) {
     cout << "Batch " << (i + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(barabasi_albert::generate_updates(barabasi_albert_parameter1, barabasi_albert_parameter2));
@@ -141,8 +141,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   deletionTotal.start();
   
   //Delete random edges
-  for (int i = 0; i < 20;i++) {
-    cout << "Batch " << (i + 21) << endl;
+  for (int i = 0; i < size;i++) {
+    cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(barabasi_albert::generate_updates(barabasi_albert_parameter1, barabasi_albert_parameter2));
 
