@@ -113,7 +113,7 @@ struct dynamic_symmetric_graph {
     v_data.capacity = nC;
 
     bool* nAA = pbbslib::new_array_no_init<bool>(nC);
-    par_for(0,existVertices.size,1,[&](size_t i){
+    par_for(0,nC,1,[&](size_t i){
       nAA[i] = i < existVertices.size ? existVertices.A[i] : false;
     });
     pbbslib::free_array(existVertices.A);
@@ -147,10 +147,14 @@ struct dynamic_symmetric_graph {
     uintE ma = pbbs::reduce(vertices,pbbs::maxm<uintE>());
     adjustVdata(std::max((size_t)ma,v_data.capacity));
 
+
     pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){
       if (i < existVertices.size) return !existVertices.A[i];
       return true;
     });
+
+    // cout << existVertices.capacity << " " << ma << endl;
+
     // cout << existingVertices.size() << endl;
     size_t sumV = existingVertices.size();
 
@@ -165,7 +169,6 @@ struct dynamic_symmetric_graph {
     n = std::max(this -> n,(size_t)ma + 1);
     v_data.size = n;
     existVertices.size = n;
-
   }
 
 
