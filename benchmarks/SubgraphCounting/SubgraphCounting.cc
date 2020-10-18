@@ -120,7 +120,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   staticTime.stop();
   */
 
-   //Add all edges from static graph
+  /*
+  //Add all edges from static graph
   pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
   par_for(0, GA.n, [&] (size_t i) {
     degrees[i] = GA.get_vertex(i).degree;
@@ -144,7 +145,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     staticTime.stop();
     batch.clear();
   }
-
+  */
   std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
 
   insertionTotal.start();
