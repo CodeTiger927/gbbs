@@ -98,35 +98,30 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   TriangleCounting triangle = TriangleCounting(h);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
-  pbbs::sequence<uintE> degrees = pbbs::sequence<uintE>(GA.n);
-  par_for(0, GA.n, [&] (size_t i) {
-    degrees[i] = GA.get_vertex(i).degree;
-  });
-  uintE maxDeg = pbbslib::reduce_max(degrees);
-  for (long idx = 0; idx < maxDeg; idx++) {
 
-    cout << idx << " out of " << maxDeg << endl;
-
-    pbbs::sequence<std::pair<uintE, uintE>> batch = pbbs::sequence<std::pair<uintE, uintE>>(GA.n);
-    par_for(0, GA.n, [&] (size_t i) {
-      if (GA.get_vertex(i).degree > 0) {
-        batch[i] = std::make_pair(i, GA.get_vertex(i).getOutNeighbor(idx % GA.get_vertex(i).degree));
-      }
-      else {
-        batch[i] = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+  
+  sequence<uintE> sizes = sequence<uintE>(GA.n,[&](size_t i) {return GA.get_vertex(i).degree;});
+  pbbslib::scan_add_inplace(sizes);
+  pbbslib::dyn_arr<std::pair<uintE,uintE>> insertBatchtmp = pbbslib::dyn_arr<std::pair<uintE,uintE>>(GA.m);
+  par_for(0,GA.n,[&](size_t i) {
+    par_for(0,GA.get_vertex(i).degree,[&](size_t j) {
+      uintE n = GA.get_vertex(i).getOutNeighbor(j);
+      if(i > n) {
+        insertBatchtmp.A[sizes[i] + j] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
+      }else{
+        insertBatchtmp.A[sizes[i] + j] = std::make_pair(i,n);
       }
     });
-    staticTime.start();
-    triangle.addEdges(getEdges(batch));
-    staticTime.stop();
-    batch.clear();
-  }
+  });
+  insertBatchtmp.size = insertBatchtmp.capacity;
+  sequence<std::pair<uintE,uintE>> insertBatch = filter(insertBatchtmp.to_seq(),[&](std::pair<uintE,uintE> p) {return (p.first != UINT_E_MAX || p.second != UINT_E_MAX);});
+
   totalTime.start();
 
-  // // Add all edges from static graph
-  // staticTime.start();
-  // triangle.addEdges(insertBatch);
-  // staticTime.stop();
+  // Add all edges from static graph
+  staticTime.start();
+  triangle.addEdges(insertBatch);
+  staticTime.stop();
   
 
   std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
