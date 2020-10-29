@@ -7,13 +7,82 @@ struct hash_pair {
 };
 
 /**
+* Converts a sequence to dynamic array.
+* 
+* @param s Input Sequence
+* @return dynamic version of the sequence
+*/
+pbbslib::dyn_arr<std::pair<uintE, uintE>> seq2da(sequence<std::pair<uintE,uintE>> s) {
+    pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size());
+
+    par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];});
+    res.size = s.size();
+
+    return res;
+}
+
+/**
+* Concatenates a dynamic array of dynamic arrays
+* 
+* @param s A dynamic array of dynamic arrays
+* @return Concatenated result of the dynamic arrays
+*/
+pbbslib::dyn_arr<std::pair<uintE,uintE>> concatDynArr(pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> & s) {
+  sequence<uintE> sizes = sequence<uintE>(s.size + 1,[&](size_t i) {
+    if(i == s.size) {
+      return (size_t)0;
+    }
+    return s.A[i].capacity;});
+  pbbslib::scan_add_inplace(sizes);
+
+  pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(sizes[sizes.size() - 1]);
+  par_for(0,s.size,[&](size_t i) {
+    par_for(0,(s.A[i]).size,[&](size_t j) {
+      res.A[sizes[i] + j] = s.A[i].A[j];
+    }); 
+  });
+  res.size = res.capacity;
+
+  s.clear();
+  return res;
+}
+
+/**
+* Add the second dynamic array to the tail of the first one.
+* 
+* @param f The first dynamic array
+* @param s The second dyamic array
+* @return combined version of the two dynamic arrays.
+*/
+pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2DynArrs(pbbslib::dyn_arr<std::pair<uintE,uintE>> & f,pbbslib::dyn_arr<std::pair<uintE,uintE>> & s) {
+
+  pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(f.size + s.size);
+  res.size = f.size + s.size;
+
+  par_for(0,res.size,[&](size_t i) {
+    if(i < f.size) {
+      res.A[i] = f.A[i];
+    }else{
+      res.A[i] = s.A[i - f.size];
+    }
+  });
+  return res;
+}
+
+/**
  * TriangleCounting stores the graph and HSet, and maintains the number of Triangles.
+ * 
+ * To invoke this class, please first pass in an initialized HSet, and call the function initalize to allocate memory for the vertices.
+ * For adding new edges, please use the addEdges function.
+ * For deleting edges, please use the removeEdges function.
  */
-struct TriangleCounting {
+class TriangleCounting {
+private:
   HSet* hset;
   sparse_table<std::pair<uintE,uintE>,uintE,hash_pair> wedges;
   uintE stored;
 
+public:
   uintE total;
 
   TriangleCounting(HSet* _hset) {
@@ -33,71 +102,7 @@ struct TriangleCounting {
   }
 
   /**
-  * Converts a sequence to dynamic array.
-  * 
-  * @param s Input Sequence
-  * @return dynamic version of the sequence
-  */
-
-  pbbslib::dyn_arr<std::pair<uintE, uintE>> seq2da(sequence<std::pair<uintE,uintE>> s) {
-      pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(s.size());
-
-      par_for(0,s.size(),[&](size_t j) {res.A[j] = s[j];});
-      res.size = s.size();
-
-      return res;
-  }
-
-  /**
-  * Concatenates a dynamic array of dynamic arrays
-  * 
-  * @param s A dynamic array of dynamic arrays
-  * @return Concatenated result of the dynamic arrays
-  */
-  pbbslib::dyn_arr<std::pair<uintE,uintE>> concatSeq(pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> & s) {
-    sequence<uintE> sizes = sequence<uintE>(s.size + 1,[&](size_t i) {
-      if(i == s.size) {
-        return (size_t)0;
-      }
-      return s.A[i].capacity;});
-    pbbslib::scan_add_inplace(sizes);
-
-    pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(sizes[sizes.size() - 1]);
-    par_for(0,s.size,[&](size_t i) {
-      par_for(0,(s.A[i]).size,[&](size_t j) {
-        res.A[sizes[i] + j] = s.A[i].A[j];
-      }); 
-    });
-    res.size = res.capacity;
-
-    s.clear();
-    return res;
-  }
-
-  /**
-  * Add the second dynamic array to the tail of the first one.
-  * 
-  * @param f The first dynamic array
-  * @param s The second dyamic array
-  * @return combined version of the two dynamic arrays.
-  */
-  pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2Seq(pbbslib::dyn_arr<std::pair<uintE,uintE>> & f,pbbslib::dyn_arr<std::pair<uintE,uintE>> & s) {
-
-    pbbslib::dyn_arr<std::pair<uintE,uintE>> res = pbbslib::dyn_arr<std::pair<uintE,uintE>>(f.size + s.size);
-    res.size = f.size + s.size;
-
-    par_for(0,res.size,[&](size_t i) {
-      if(i < f.size) {
-        res.A[i] = f.A[i];
-      }else{
-        res.A[i] = s.A[i - f.size];
-      }
-    });
-    return res;
-  }
-
-  /**
-  * Resizes the Wedges to an apporpriate capacity
+  * Given the expected number of wedges pairs, it would automatically adjust the Wedges map to an apporpriate capacity
   * 
   * @param amount The new expected number of wedges pairs
   */
@@ -123,7 +128,8 @@ struct TriangleCounting {
   }
 
   /**
-  * Prints the elements of HSet.
+  * Prints the elements of HSet with spaces separating each element.
+  * For debug purposes
   */
   void printH() {
     for(int i = 0;i < hset -> getH().size();++i) {
@@ -133,7 +139,8 @@ struct TriangleCounting {
   }
 
   /**
-  * Output the count for each pair of wedges pair (i,j)
+  * Output the count for each pair of wedges pair (i,j), in the format of i - j : #count
+  * For debug purposes
   */
   void printAllWedges() {
     for(int i = 0; i < hset -> G -> n;++i) {
@@ -145,7 +152,7 @@ struct TriangleCounting {
   }
 
   /**
-  * Adds c to wedges pair (a,b)
+  * Adds c to wedges pair (a,b) in the Wedges table
   * 
   * @param a the first index of the pair
   * @param b the second index of the pair
@@ -162,7 +169,7 @@ struct TriangleCounting {
   }
 
   /**
-  * Removes c to wedges pair (a,b)
+  * Removes c to wedges pair (a,b) in the Wedges table
   * 
   * @param a the first index of the pair
   * @param b the second index of the pair
@@ -314,10 +321,10 @@ struct TriangleCounting {
       }
     });
 
-    sequence<std::pair<uintE,uintE>> allNewWedges = merge_sort(concatSeq(newWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    sequence<std::pair<uintE,uintE>> allNewWedges = merge_sort(concatDynArr(newWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     addWedges(allNewWedges);
 
-    sequence<std::pair<uintE,uintE>> allRemovedWedges = merge_sort(concatSeq(removedWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    sequence<std::pair<uintE,uintE>> allRemovedWedges = merge_sort(concatDynArr(removedWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     removeWedges(allRemovedWedges);
 
     newWedges.del();
@@ -327,7 +334,7 @@ struct TriangleCounting {
   }
 
   /**
-  * Initializes as a graph of n vertices(or with id of at most n - 1)
+  * Initializes as a graph of n vertices(or with id of at most n - 1).
   *
   * @param n the expected max id of the vertices in the grpah.
   */
@@ -340,6 +347,13 @@ struct TriangleCounting {
 
   /**
   * Adds edges to the graph, which will also modify the H-Set and update the triangle counts
+  * It is consisted of 6 steps:
+  * Step 1 - Add edges in the HSet and Dynamic Symmetric Graph.
+  * Step 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
+  * STep 3 - Find triangles formed with the H Set
+  * Step 4 - Sum up all the tirangles we have found
+  * Step 5 - Add in the newly formed wedges and adjust them according to the new modified HSet
+  * Step 6 - Clean up memory
   *
   * @param edges The sequence of edges that need to be added
   */
@@ -553,7 +567,9 @@ struct TriangleCounting {
         if(hset -> G -> existEdge(u,next) && hset -> G -> existEdge(v,next)) {
           // Triangle!
           // I decided to this instead, since if i do case work, there would be like 26 if statements
+          // The counter calculate the number of times the triangles would be overcounted
           int counter = 1;
+
           if(allEdges.find(std::make_pair(next,u),false) && hset -> contains(v)) {
             counter++;
           }
@@ -582,10 +598,12 @@ struct TriangleCounting {
     total += pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<uintE>()) / 6;
     hsetTriangles.del();
 
-    // STEP 4
+    // STEP 5: Add in edges
 
-    sequence<std::pair<uintE,uintE>> allNewWedges = merge_sort(concatSeq(newWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    sequence<std::pair<uintE,uintE>> allNewWedges = merge_sort(concatDynArr(newWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     addWedges(allNewWedges);
+
+    // STEP 6: Clean ups
     newWedges.del();
     allNewWedges.clear();
     allEdges.del();
@@ -597,7 +615,13 @@ struct TriangleCounting {
 
   /**
   * Removes edges from the graph, which will also modify the H-Set and update the triangle counts
-  *
+  * It is consisted of 6 steps:
+  * Step 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
+  * Step 2 - triangles removed with h-set
+  * STep 3 - Find triangles formed with the H Set
+  * Step 4 - Sum up all the tirangles we have found
+  * Step 5 - Remove the deleted wedges
+  * Step 6 - Memory Cleanups
   * @param edges The sequence of edges that need to be added
   */
   void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
@@ -788,7 +812,7 @@ struct TriangleCounting {
         if(hset -> G -> existEdge(u,next) && hset -> G -> existEdge(v,next)) {
           // Triangle!
           // I decided to this instead, since if i do case work, there would be like 26 if statements
-          // TODO: What is the meaning of these counters?
+          // The counters calculate the number of times the triangles would be overcounted
           int counter = 1;
           int counter2 = -1;
           if(allEdges.find(std::make_pair(u,next),false) && hset -> contains(v)) {
@@ -823,7 +847,7 @@ struct TriangleCounting {
     total += pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<long long>()) / 6;
     hsetTriangles.del();
 
-    // STEP 4 - Updates the HSet and the wedges
+    // STEP 4 - Updates the HSet
 
     hset -> eraseEdges(edges);
 
@@ -835,9 +859,13 @@ struct TriangleCounting {
       originalHSet.insert(std::make_tuple(originalH[i],true));
     });
 
-    sequence<std::pair<uintE,uintE>> allRemovedWedges = merge_sort(concatSeq(removedWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
+    // STEP 5 - Remove wedges they no longer exist
+
+    sequence<std::pair<uintE,uintE>> allRemovedWedges = merge_sort(concatDynArr(removedWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     removeWedges(allRemovedWedges);
     adjustHSetWedges(originalH,hs,allEdges,originalHSet); 
+
+    // Step 6 - Memory Clean up
     removedWedges.del();
     allRemovedWedges.clear();
     allEdges.del();

@@ -182,7 +182,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   pbbslib::free_array(h->G->v_data.A);
   pbbslib::free_array(h->G->existVertices.A);
-  pbbslib::free_array(triangle.wedges.table);
+  triangle.del();
 
   return 0;
 }
