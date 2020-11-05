@@ -1,8 +1,5 @@
-
-
 #include "hindex_dyn_arr.h"
 #include "hindex_threshold.h"
-#include "hindex_sparse_table.h"
 #include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
@@ -66,13 +63,11 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   assert(P.getOption("-s"));
   assert(type < 2); //Valid option (will increase as there are more options)
 
-
-  // TODO: Modify barabsi_albert to accept a random seed so that it generates new batches every time.
   // Parameters for barabsi_albert
   // Parameter 1  
-  uintE barabasi_albert_parameter1 = 1000;
+  uintE barabasi_albert_parameter1 = 10;
   // Parameter 2
-  uintE barabasi_albert_parameter2 = 100;
+  uintE barabasi_albert_parameter2 = 5;
 
   timer insertion;
   timer insertionTotal;
@@ -182,7 +177,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   pbbslib::free_array(h->G->v_data.A);
   pbbslib::free_array(h->G->existVertices.A);
-  triangle.del();
+  pbbslib::free_array(triangle.wedges.table);
 
   return 0;
 }
@@ -192,7 +187,6 @@ template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
   long size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
-
   std::cout << "### Application: Subgraph Counting" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
   std::cout << "### Threads: " << num_workers() << std::endl;
@@ -200,17 +194,12 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "### m: " << GA.m << std::endl;
   std::cout << "### Params: -type = " << type << std::endl;
   std::cout << "### ------------------------------------" << endl;
-
   assert(P.getOption("-s"));
   assert(type < 3); //Valid option (will increase as there are more options)
-
-
   timer clock;
-
   //auto _dynG = dynamifyDSG<dynamic_symmetric_vertex, pbbs::empty, Graph>(GA); //Dynamify inside main
   auto _dynG = createEmptyDynamicSymmetricGraph<dynamic_symmetric_vertex, pbbs::empty>();
   HSet* h;
-
   if (type == 0) {
     h = new HSetDynArr(&_dynG);
     std::cout << "DYN_ARR VERSION\n" << std::endl;
@@ -219,23 +208,16 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetThreshold(&_dynG, GA.n);
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
-
   TriangleCounting triangle = TriangleCounting(h);
-
   clock.start();
-
   pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>> batches = pbbs::sequence<pbbs::sequence<std::pair<uintE, uintE>>>(size);
   for (int i = 0; i < size; i++) {
     std::cout << "\n-----CHANGE " << (i + 1) << "-----" << std::endl;
-
     batches[i] = barabasi_albert::generate_updates(rand() % 1000 + 50, rand() % 100 + 5);
     //batches[i] = barabasi_albert::generate_updates(rand() % 10, rand() % 5); //Smaller dataset easier to debug
-
     //h->insertEdges(getEdges(batches[i]));
     triangle.addEdges(getEdges(batches[i]));
-
     int t = 0;
-
     for (int u = 0; u < h->G->n; u++) {
       for (int v = u + 1; v < h->G->n; v++) {
         for (int w = v + 1; w < h->G->n; w++) {
@@ -243,21 +225,16 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
         }
       }
     }
-
     std::cout << "Trianges: " << triangle.total << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
-
     assert(t == triangle.total);
   }
   
   for (int i = size - 1; i >= 0; i--) {
     std::cout << "\n-----CHANGE " << (2 * size - i) << "-----" << std::endl;
-
     //h->eraseEdges(getEdges(batches[i]));
     triangle.removeEdges(getEdges(batches[i]));
-
     int t = 0;
-
     for (int u = 0; u < h->G->n; u++) {
       for (int v = u + 1; v < h->G->n; v++) {
         for (int w = v + 1; w < h->G->n; w++) {
@@ -265,19 +242,16 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
         }
       }
     }
-
     std::cout << "Trianges: " << triangle.total << std::endl;
     std::cout << "h-index: " << h->hindex << std::endl;
-
     assert(t == triangle.total);
   }
   
-
   std::cout << "\n\n------------------------------------" << endl;
   std::cout << "FINAL GRAPH SIZE: " << h->G->n << ", " << h->G->m << endl;
   std::cout << "RUN TIME: " << clock.stop() << std::endl;
-
   return 0;
 }
+
 */
 generate_symmetric_main(AppSubgraphCounting_runner, false);

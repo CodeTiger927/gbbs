@@ -2,43 +2,31 @@
 
 #include "hindex.h"
 
-//---------------------------------------------------------------------------------//
-//HSET DYN_ARR
-//---------------------------------------------------------------------------------//
-
+/**
+ * HSet implementation that dynamically maintains H in parallel using a dyn_arr to bucket the vertices
+ *
+ * H stores h vertices, where h is the largest number such
+ * that there are at least h vertices with degree greater than or equal to h
+ */
 class HSetDynArr : public HSet {
 
-  public:
+  private:
 
     uintE bSize; //Number of elements with degree hindex and are inside H
     pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C; //Sorts all vertices by degree
 
-    //Constructor - Takes in initial graph
-    HSetDynArr(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) : HSet(_G) {
-
-      bSize = 0;
-
-      C = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(std::max(2 * this->G->n, INIT_C_SIZE));
-
-      par_for(0, C.capacity, [&] (size_t i) { 
-        C.A[i] = nullptr;
-      });
- 
-      //Add all starting graph elements into HSet
-      if (_G->n > 0) {
-        auto start = pbbs::sequence<uintE>(_G->n);
-        par_for(0, start.size(), [&] (size_t i) {
-          start[i] = i;
-        });
-
-        insert(start);
-      }
-
-    }
-
-    //--------------------------INSERT--------------------------//
-    //batch is a sequence of vertex ids (that can be used to get from graph)
-    //sorted = true if batch is already sorted in descending order
+    /**
+     * Given a batch of vertices, adds all of them to HSet
+     * Automatically resizes everything by itself
+     *
+     * @param batch, sequence of vertices to be added to HSet
+     *     All vertices in batch must be in the graph
+     *     Can be empty
+     *     CANNOT add vertex if it is already tracked by HSet (e.g. present in C)
+     * @param sorted, optional oolean determining if batch is already sorted by degree in nonascending order
+     *     Set to false by default
+     *     Saves time by not resorting batch if it's already sorted
+     */
     uintE insert(sequence<uintE> batch, bool sorted = false) {
 
       //Exits if there are no vertices in batch
@@ -149,9 +137,18 @@ class HSetDynArr : public HSet {
       return this->hindex;
     }
 
-    //--------------------------ERASE--------------------------//   
-    //batch is a sequence of vertex ids (that can be used to get from graph)
-    //sorted = true if batch is already sorted in descending order
+    /**
+     * Given a batch of vertices, removes all of them to HSet
+     * Automatically resizes everything by itself
+     *
+     * @param batch, sequence of vertices to be added to HSet
+     *     All vertices in batch must be in the graph and in HSet
+     *     Can be empty
+     *     CANNOT remove a vertex if it is not tracked by HSet (e.g. not present in C)
+     * @param sorted, optional boolean determining if batch is already sorted by degree in nonascending order
+     *     Set to false by default
+     *     Saves time by not resorting batch if it's already sorted
+     */
     uintE erase(sequence<uintE> batch, bool sorted = false) {
 
       pbbs::sequence<uintE> sortedBatch;
@@ -240,7 +237,15 @@ class HSetDynArr : public HSet {
     }
   
 
-    //--------------------------ADD TO C--------------------------//
+    /**
+     * Given a batch of vertices and their corresponding degrees, dynamically adds all of the vertices to C
+     * Automatically resizes everything by itself
+     * 
+     * @param batch, sequence of vertices to be added to C
+     *     Batch MUST be sorted by degree in nonascending order
+     * @param deg, sequence of degrees mapping to the vertices in batch
+     *     e.g. vertex at batch[i] must have degree of deg[i]
+     */
     void addToC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
 
       /*    
@@ -269,7 +274,7 @@ class HSetDynArr : public HSet {
         pbbs::sequence<uintE> extra = batch.slice(start, end);
 
         if (C.A[deg[indices[i]]] == nullptr) {
-          C.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(INIT_DEG_SIZE);
+          C.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(1);
         }
         C.A[deg[indices[i]]]->add(extra);
 
@@ -278,17 +283,16 @@ class HSetDynArr : public HSet {
       indices.clear();
     }
 
-    //--------------------------REMOVE FROM C--------------------------//
+    /**
+     * Given a batch of vertices and their corresponding degrees, dynamically removes all of the vertices from C
+     * Automatically resizes everything by itself
+     * 
+     * @param batch, sequence of vertices to be removed from C
+     *     Batch MUST be sorted by degree in nonascending order
+     * @param deg, sequence of degrees mapping to the vertices in batch
+     *     e.g. vertex at batch[i] must have degree of deg[i]
+     */
     void removeFromC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
-    
-      /*
-      //Subraction
-      sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
-    
-      par_for(0, deg.size() - 1, [&] (size_t i) {
-        difference[i] = (deg[i] != deg[i + 1]);  
-      });
-      */
 
       sequence<size_t> idx = pbbs::sequence<size_t>(batch.size());
 
@@ -354,35 +358,72 @@ class HSetDynArr : public HSet {
       indices.clear();
     }
 
+    /**
+     * Helper function that shrinks the size of C so it doesn't take too much memory 
+     */
     void adjust() {
       /* Saves memory, more time - Sparse Graphs
       for (; C.size / 2 > 0; C.size--) {
         if (C.A[C.size - 1] != nullptr && C.A[C.size - 1]->size != 0) {
-          cout << "---" << C.size << endl;
           break;
         }
       }
       */
     
       C.size = std::min(this->G->n, C.size); //More memory, saves time - Dense Graphs
-      if (C.size < C.capacity / 4 && 2 * C.size > INIT_C_SIZE) {
-        auto nA = pbbs::new_array_no_init<pbbslib::dyn_arr<uintE>*>(std::max(2 * C.size, INIT_C_SIZE));
+      if (C.size < C.capacity / 4 && 2 * C.size > 1) {
+        auto nA = pbbs::new_array_no_init<pbbslib::dyn_arr<uintE>*>(std::max(2 * C.size, (size_t) 1));
         par_for(0, C.size, [&] (size_t i) {
           nA[i] = C.A[i];
         });
-        par_for(C.size, std::max(2 * C.size, INIT_C_SIZE), [&] (size_t i) {
+        par_for(C.size, std::max(2 * C.size, (size_t) 1), [&] (size_t i) {
           nA[i] = nullptr;
         });
         if (C.alloc) {
          //pbbslib::free_array(C.A);
         }
         C.A = nA;
-        C.capacity = std::max(2 * C.size, INIT_C_SIZE);
+        C.capacity = std::max(2 * C.size, (size_t) 1);
       }
       //Alternative is to set C.size to min(number of vertices, C.size). Faster but could waste space on really sparse graphs
     }
-  
 
+
+  public:
+
+    /**
+     * Constructs HSetDynArr given a pointer to a dynamic graph
+     *
+     * @param _G, an unweighted dynamic_symmetric_graph, graph does not have to be empty
+     */
+    HSetDynArr(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) : HSet(_G) {
+
+      bSize = 0;
+
+      C = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(std::max(2 * this->G->n, (size_t) 1));
+
+      par_for(0, C.capacity, [&] (size_t i) { 
+        C.A[i] = nullptr;
+      });
+ 
+      //Add all starting graph elements into HSet
+      if (_G->n > 0) {
+        auto start = pbbs::sequence<uintE>(_G->n);
+        par_for(0, start.size(), [&] (size_t i) {
+          start[i] = i;
+        });
+
+        insert(start);
+      }
+
+    }
+
+    /**
+     * Given a batch of vertices, adds all of the new vertices to HSet in parallel
+     *
+     * @param vertices, sequence of vertices to be added, can contain existing vertices (will just be ignored)
+     * @return the h-index after all the vertex insertions
+     */
     uintE insertVertices(sequence<uintE> vertices) {
       this->G->batchAddVertices(vertices);
       insert(vertices);
@@ -390,6 +431,12 @@ class HSetDynArr : public HSet {
       return this->hindex;
     }
 
+    /**
+     * Given a batch of vertices in the graph, deletes all of the existing ones from HSet in parallel
+     *
+     * @param vertices, sequence of vertices to be deleted, can contain vertices that don't exist yet (will just be ignored)
+     * @return the h-index after all the vertex deletions
+     */
     uintE eraseVertices(sequence<uintE> vertices) {
       erase(vertices);
       this->G->batchRemoveVertices(vertices);
@@ -397,7 +444,17 @@ class HSetDynArr : public HSet {
       return this->hindex;
     }
 
-    //Insert edges once e.g. u--v inserts v--u as well
+    /**
+     * Given a batch edges, inserts all of the new edges in parallel
+     * Automatically adds any new vertices in the edge list
+     *
+     * @param edges, sequence of edges to be added
+     *      Adding edge u, v also adds edge v, u since the graph is symmetric
+     *      CANNOT contain duplicate  edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      Can contain edges that already exist (will just be ignored)
+     *      Edges can contain new vertices (will be added automatically)
+     * @return the h-index after adding all the edges
+     */
     uintE insertEdges(sequence<std::pair<uintE, uintE>> edges) {
 
       auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !this->G->existEdge(e.first, e.second); } );
@@ -447,6 +504,16 @@ class HSetDynArr : public HSet {
       return this->hindex;
     }
 
+    /**
+     * Given a batch edges, deletes all of the new edges in parallel
+     * Automatically removes any zero degree vertices from the graph after the deletion
+     *
+     * @param edges, sequence of edges to be erased
+     *      Erasing edge u, v also erases edge v, u since the graph is symmetric
+     *      CANNOT contain duplicate edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      Can contain edges that don't exist (will be ignored)
+     * @return the h-index after deleting all the edges
+     */
     uintE eraseEdges(sequence<std::pair<uintE, uintE>> edges) {
     
       auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return this->G->existEdge(e.first, e.second); } );
@@ -502,9 +569,15 @@ class HSetDynArr : public HSet {
       return this->hindex;
     }
 
-    //Contains can just check the degree of a vertex and see if it is greater than |H|
-    //If vertex's degree is the hindex, we check if it is contained in B
+    /**
+     * Returns a boolean that determines if a vertex belongs to H or not
+     *
+     * @param target, the vertex in question
+           target does not have to be in the graph (function will return false)
+     * @return whether or not target is in H
+     */
     bool contains(uintE target) {
+      if (target >= this->G->existVertices.size || !this->G->existVertices.A[target]) return false;
       uintE deg = this->G->get_vertex(target).degree;
 
       if (deg > this->hindex) return true;
@@ -516,13 +589,11 @@ class HSetDynArr : public HSet {
       return false;
     }
 
-    void del() {
-      par_for(0, C.size, [&] (size_t i) {
-        if (C.A[i] != nullptr) pbbslib::free_array(C.A[i]->A);
-      });
-      pbbslib::free_array(C.A);
-    }
-
+    /**
+     * Returns a sequence with all of the vertices in H
+     *
+     * @return sequence of all the vertices in H
+     */
     pbbs::sequence<uintE> getH() {
       if (this->hindex == 0) {
         return pbbs::sequence<uintE>(0);
@@ -563,32 +634,16 @@ class HSetDynArr : public HSet {
       });
 
       return hSeq;
+    }
 
-      /*
-      auto H = make_sparse_table<uintE, pbbs::empty,hash_uintE>(2 * this->hindex + 1 ,std::make_tuple(UINT_E_MAX, pbbs::empty()),hash_uintE());
-      par_for(this->hindex + 1, C.size, [&] (size_t i) {
-        if (C.A[i] != nullptr) {
-          par_for(0, C.A[i]->size, [&] (size_t j) {
-            H.insert(std::make_tuple(C.A[i]->A[j], pbbs::empty()));
-          });
-        }
+    /**
+     * Frees all data structures used in HSet
+     */
+    void del() {
+      par_for(0, C.size, [&] (size_t i) {
+        if (C.A[i] != nullptr) pbbslib::free_array(C.A[i]->A);
       });
-
-      if (C.A[this->hindex] != nullptr && bSize != 0) {
-        par_for(0, bSize, [&] (size_t i) {
-          H.insert(std::make_tuple(C.A[this->hindex]->A[i], pbbs::empty()));
-        });
-      }
-
-      auto hSeq = H.entries();
-      pbbs::sequence<uintE> result = pbbs::sequence<uintE>(this->hindex);
-
-      par_for(0, result.size(), [&] (size_t i) {
-        result[i] = std::get<0>(hSeq[i]);
-      });
-
-      return result;
-      */
+      pbbslib::free_array(C.A);
     }
 
 };

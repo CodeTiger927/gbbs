@@ -2,13 +2,18 @@
 
 #include "hindex.h"
 
-//--------------------------------------------------------------------------//
-//HSET THRESHOLD/HYBRID
-//--------------------------------------------------------------------------//
-
+/**
+ * HSet implementation that dynamically maintains H in parallel using both a sparse_table and dyn_arr
+ * sparse_table stores vertices with degree greater than or equal to some threshold passed in
+ * dyn_arr stores the rest of the vertices (vertices with degree less than threshold)
+ *
+ * H stores h vertices, where h is the largest number such
+ * that there are at least h vertices with degree greater than or equal to h
+ */
 class HSetThreshold : public HSet {
 
-  public:
+  private:
+
     uintE bSize;
     pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> lowC;
     sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE> highC;
@@ -17,39 +22,18 @@ class HSetThreshold : public HSet {
 
     uintE highCStored;
 
-    //Constructor
-    //HSet(Graph& _G) { //Don't pass by reference
-    HSetThreshold(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G, uintE a) : HSet(_G) {
-
-      bSize = 0;
-
-      threshold = a;
-
-      highCStored = 0;
-
-      lowC = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(threshold);
-      highC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
-        (std::max(2 * _G->n, INIT_C_SIZE), std::make_tuple(UINT_E_MAX, nullptr),hash_uintE());
-
-      par_for(0, lowC.capacity, [&] (size_t i) { 
-        lowC.A[i] = nullptr;
-      });
-
-      //Add all starting graph elements into HSet
-      if (_G->n > 0) {
-        auto start = pbbs::sequence<uintE>(_G->n);
-        par_for(0, start.size(), [&] (size_t i) {
-          start[i] = i;
-        });
-
-        insert(start);
-      }
-
-    }
-
-    //--------------------------INSERT--------------------------//
-    //batch is a sequence of vertex ids (that can be used to get from graph)
-    //sorted = true if batch is already sorted in descending order
+    /**
+     * Given a batch of vertices, adds all of them to HSet
+     * Automatically resizes everything by itself
+     *
+     * @param batch, sequence of vertices to be added to HSet
+     *     All vertices in batch must be in the graph
+     *     Can be empty
+     *     CANNOT add vertex if it is already tracked by HSet (e.g. present in C)
+     * @param sorted, optional boolean determining if batch is already sorted by degree in nonascending order
+     *     Set to false by default
+     *     Saves time by not resorting batch if it's already sorted
+     */
     uintE insert(sequence<uintE> batch, bool sorted = false) {
 
       if (batch.size() == 0) return this->hindex;
@@ -100,7 +84,7 @@ class HSetThreshold : public HSet {
         if (highC.alloc) pbbslib::free_array(highC.table);
         
         highC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
-          (std::max((size_t) 2 * highCStored, INIT_C_SIZE), std::make_tuple(UINT_E_MAX, nullptr),hash_uintE());
+          (std::max((size_t) 2 * highCStored, (size_t) 1), std::make_tuple(UINT_E_MAX, nullptr),hash_uintE());
 
         par_for(0, entries.size(), [&] (size_t i) {
           highC.insert(entries[i]);
@@ -195,9 +179,18 @@ class HSetThreshold : public HSet {
     }
 
     
-    //--------------------------ERASE--------------------------//   
-    //batch is a sequence of vertex ids (that can be used to get from graph)
-    //sorted = true if batch is already sorted in descending order
+    /**
+     * Given a batch of vertices, removes all of them to HSet
+     * Automatically resizes everything by itself
+     *
+     * @param batch, sequence of vertices to be added to HSet
+     *     All vertices in batch must be in the graph and in HSet
+     *     Can be empty
+     *     CANNOT remove a vertex if it is not tracked by HSet (e.g. not present in C)
+     * @param sorted, optional boolean determining if batch is already sorted by degree in nonascending order
+     *     Set to false by default
+     *     Saves time by not resorting batch if it's already sorted
+     */
     uintE erase(sequence<uintE> batch, bool sorted = false) {
 
       pbbs::sequence<uintE> sortedBatch;
@@ -311,23 +304,23 @@ class HSetThreshold : public HSet {
         if (getC(deg[indices[i]]) == nullptr) {
           if (deg[indices[i]] >= threshold) {
             if (highC.contains(deg[indices[i]])) {
-              highC.change(deg[indices[i]], new pbbslib::dyn_arr<uintE>(INIT_DEG_SIZE));
+              highC.change(deg[indices[i]], new pbbslib::dyn_arr<uintE>(1));
             }
             else {
-              highC.insert(std::make_tuple(deg[indices[i]], new pbbslib::dyn_arr<uintE>(INIT_DEG_SIZE)));
+              highC.insert(std::make_tuple(deg[indices[i]], new pbbslib::dyn_arr<uintE>(1)));
             }
           }
           else {
-            lowC.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(INIT_DEG_SIZE);
+            lowC.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(1);
           }     
         }
 
         getC(deg[indices[i]])->add(extra);
 
         //Make sure not wasting space
-        if (getC(deg[indices[i]])->size <= getC(deg[indices[i]])->capacity / 4 && 2 * getC(deg[indices[i]])->size > INIT_DEG_SIZE) {
+        if (getC(deg[indices[i]])->size <= getC(deg[indices[i]])->capacity / 4 && 2 * getC(deg[indices[i]])->size > 1) {
 
-          auto nA = pbbs::new_array_no_init<uintE>(std::max(2 * getC(deg[indices[i]])->size, INIT_DEG_SIZE));
+          auto nA = pbbs::new_array_no_init<uintE>(std::max(2 * getC(deg[indices[i]])->size, (size_t) 1));
           par_for(0, getC(deg[indices[i]])->size, [&] (size_t j) {
             nA[j] = getC(deg[indices[i]])->A[j];
           });
@@ -425,7 +418,7 @@ class HSetThreshold : public HSet {
 
 
     void adjust() {
-      if (highCStored <= highC.m / 4 && 2 * highCStored >= INIT_C_SIZE) {
+      if (highCStored <= highC.m / 4 && 2 * highCStored >= 1) {
 
         auto entries = pbbs::filter(highC.entries(), [&] (std::tuple<uintE, pbbslib::dyn_arr<uintE>*> element) {
           return std::get<1>(element) != nullptr;
@@ -445,21 +438,50 @@ class HSetThreshold : public HSet {
         
       }
     }
+    
 
+  public:
 
+    /**
+     * Constructs HSetThreshold given a pointer to a dynamic graph and a threshold
+     *
+     * @param _G, an unweighted dynamic_symmetric_graph, graph does not have to be empty
+     * @param a, threshold, determines boundary between vertices stored in sparse_table and dyn_arr
+     */
+    HSetThreshold(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G, uintE a) : HSet(_G) {
 
-    bool contains(uintE target) {
-      uintE deg = this->G->get_vertex(target).degree;
+      bSize = 0;
 
-      if (deg > this->hindex) return true;
-      else if (deg == this->hindex) {
-        for (size_t i = 0; i < bSize; i++) {
-          if (getC(deg)->A[i] == target) return true;
-        }
+      threshold = a;
+
+      highCStored = 0;
+
+      lowC = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(threshold);
+      highC = make_sparse_table<uintE, pbbslib::dyn_arr<uintE>*, hash_uintE>
+        (std::max(2 * _G->n, (size_t) 1), std::make_tuple(UINT_E_MAX, nullptr),hash_uintE());
+
+      par_for(0, lowC.capacity, [&] (size_t i) { 
+        lowC.A[i] = nullptr;
+      });
+
+      //Add all starting graph elements into HSet
+      if (_G->n > 0) {
+        auto start = pbbs::sequence<uintE>(_G->n);
+        par_for(0, start.size(), [&] (size_t i) {
+          start[i] = i;
+        });
+
+        insert(start);
       }
-      return false;
+
     }
 
+    /**
+     * Given a batch of vertices, adds all of the new vertices to HSet in parallel
+     *
+     * @param vertices, sequence of vertices to be added, can contain existing vertices (will just be ignored)
+     * @return the h-index after all the vertex insertions
+     */
     uintE insertVertices(pbbs::sequence<uintE> vertices) { 
       this->G->batchAddVertices(vertices);
       insert(vertices);
@@ -467,12 +489,30 @@ class HSetThreshold : public HSet {
       return this->hindex;
     }
 
+    /**
+     * Given a batch of vertices in the graph, deletes all of the existing ones from HSet in parallel
+     *
+     * @param vertices, sequence of vertices to be deleted, can contain vertices that don't exist yet (will just be ignored)
+     * @return the h-index after all the vertex deletions
+     */
     uintE eraseVertices(pbbs::sequence<uintE> vertices) { 
       this->G->batchRemoveVertices(vertices);
       erase(vertices);
       adjust();
       return this->hindex;
     }
+
+    /**
+     * Given a batch edges, inserts all of the new edges in parallel
+     * Automatically adds any new vertices in the edge list
+     *
+     * @param edges, sequence of edges to be added
+     *      Adding edge u, v also adds edge v, u since the graph is symmetric
+     *      CANNOT contain duplicate  edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      Can contain edges that already exist (will just be ignored)
+     *      Edges can contain new vertices (will be added automatically)
+     * @return the h-index after adding all the edges
+     */
     uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) { 
 
       //Get unique vertices
@@ -520,6 +560,16 @@ class HSetThreshold : public HSet {
       return this->hindex;
     }
 
+    /**
+     * Given a batch edges, deletes all of the new edges in parallel
+     * Automatically removes any zero degree vertices from the graph after the deletion
+     *
+     * @param edges, sequence of edges to be erased
+     *      Erasing edge u, v also erases edge v, u since the graph is symmetric
+     *      CANNOT contain duplicate edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      Can contain edges that don't exist (will be ignored)
+     * @return the h-index after deleting all the edges
+     */
     uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) { 
 
       //Get unique vertices
@@ -559,21 +609,30 @@ class HSetThreshold : public HSet {
       return this->hindex;
     }
 
-    
-    void del() {
-      auto highCEntries = highC.entries();
-      par_for(0, highCEntries.size(), [&] (size_t i) {
-        pbbslib::free_array(std::get<1>(highCEntries[i])->A);
-      });
-      pbbslib::free_array(highC.table);
+    /**
+     * Returns a boolean that determines if a vertex belongs to H or not
+     *
+     * @param target, the vertex in question
+           target does not have to be in the graph (function will return false)
+     * @return whether or not target is in H
+     */
+    bool contains(uintE target) {
+      uintE deg = this->G->get_vertex(target).degree;
 
-      par_for(0, lowC.size, [&] (size_t i) {
-        if (lowC.A[i] != nullptr) pbbslib::free_array(lowC.A[i]->A);
-      });
-      pbbslib::free_array(lowC.A);
+      if (deg > this->hindex) return true;
+      else if (deg == this->hindex) {
+        for (size_t i = 0; i < bSize; i++) {
+          if (getC(deg)->A[i] == target) return true;
+        }
+      }
+      return false;
     }
 
-    
+    /**
+     * Returns a sequence with all of the vertices in H
+     *
+     * @return sequence of all the vertices in H
+     */
     pbbs::sequence<uintE> getH() {
       if (this->hindex == 0) {
         return pbbs::sequence<uintE>(0);
@@ -614,49 +673,22 @@ class HSetThreshold : public HSet {
       });
 
       return hSeq;
+    }
 
-      /*
-      if (this->hindex == 0) {
-        return pbbs::sequence<uintE>(0);
-      }
-
-      auto H = make_sparse_table<uintE, pbbs::empty,hash_uintE>(2 * this->hindex + 1, std::make_tuple(UINT_E_MAX, pbbs::empty()),hash_uintE());
-
-      if (threshold > 0 && this->hindex + 1 < threshold) {
-        par_for(this->hindex + 1, threshold, [&] (size_t i) {
-          if (lowC.A[i] != nullptr) {
-            par_for(0, lowC.A[i]->size, [&] (size_t j) {
-              H.insert(std::make_tuple(lowC.A[i]->A[j], pbbs::empty()));
-            });
-          }
-        });
-      }
-
+    /**
+     * Frees all data structures used in HSet
+     */
+    void del() {
       auto highCEntries = highC.entries();
       par_for(0, highCEntries.size(), [&] (size_t i) {
-        if (std::get<0>(highCEntries[i]) > hindex && std::get<1>(highCEntries[i]) != nullptr) {
-          par_for(0, std::get<1>(highCEntries[i])->size, [&] (size_t j) {
-            H.insert(std::make_tuple(std::get<1>(highCEntries[i])->A[j], pbbs::empty()));
-          });
-        }
+        pbbslib::free_array(std::get<1>(highCEntries[i])->A);
       });
+      pbbslib::free_array(highC.table);
 
-      if (bSize != 0 && getC(this->hindex) != nullptr) {
-        par_for(0, bSize, [&] (size_t i) {
-          H.insert(std::make_tuple(getC(this->hindex)->A[i], pbbs::empty()));
-        });
-      }
-
-      auto hSeq = H.entries();
-      pbbs::sequence<uintE> result = pbbs::sequence<uintE>(this->hindex);
-
-      par_for(0, result.size(), [&] (size_t i) {
-        result[i] = std::get<0>(hSeq[i]);
+      par_for(0, lowC.size, [&] (size_t i) {
+        if (lowC.A[i] != nullptr) pbbslib::free_array(lowC.A[i]->A);
       });
-
-      return result;
-      */
+      pbbslib::free_array(lowC.A);
     }
-    
 
 };
