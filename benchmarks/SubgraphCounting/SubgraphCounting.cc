@@ -63,8 +63,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   assert(P.getOption("-s"));
   assert(type < 2); //Valid option (will increase as there are more options)
 
-
-  // TODO: Modify barabsi_albert to accept a random seed so that it generates new batches every time.
   // Parameters for barabsi_albert
   // Parameter 1  
   uintE barabasi_albert_parameter1 = 10;
@@ -179,7 +177,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   pbbslib::free_array(h->G->v_data.A);
   pbbslib::free_array(h->G->existVertices.A);
-  triangle.del();
+  pbbslib::free_array(triangle.wedges.table);
 
   return 0;
 }
@@ -254,5 +252,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   std::cout << "RUN TIME: " << clock.stop() << std::endl;
   return 0;
 }
+
 */
 generate_symmetric_main(AppSubgraphCounting_runner, false);
