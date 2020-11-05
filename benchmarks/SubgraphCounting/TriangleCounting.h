@@ -345,62 +345,7 @@ public:
     nodes.clear();
   }
 
-  /**
-  * Adds edges to the graph, which will also modify the H-Set and update the triangle counts
-  * It is consisted of 6 steps:
-  * Step 1 - Add edges in the HSet and Dynamic Symmetric Graph.
-  * Step 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
-  * STep 3 - Find triangles formed with the H Set
-  * Step 4 - Sum up all the tirangles we have found
-  * Step 5 - Add in the newly formed wedges and adjust them according to the new modified HSet
-  * Step 6 - Clean up memory
-  *
-  * @param edges The sequence of edges that need to be added
-  */
-  void addEdges(sequence<std::pair<uintE,uintE>> edges) {
-    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset -> G -> existEdge(e.first, e.second); } );
-
-    // STEP 1 - Adjust the H Set
-
-    // AllEdges in the form of a sparse table, allowing O(1) lookup if an edge exists.
-    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
-    par_for(0,edges.size(),[&](size_t i) {
-      allEdges.insert(std::make_tuple(edges[i],true));
-      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
-    });
-
-    // The original HSet elements
-    sequence<uintE> originalH = hset -> getH();
-
-    hset -> insertEdges(edges);
-
-    // The new HSet elements
-    sequence<uintE> hs = hset -> getH();
-
-    // The original HSet elements in a sparse table, allowing O(1) lookup if an element was originally in the hset.
-    auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
-
-    par_for(0,originalH.size(),[&](size_t i) {
-      originalHSet.insert(std::make_tuple(originalH[i],true));
-    });  
-
-    // Adjusts the wedges now that we have updated the HSet
-    adjustHSetWedges(originalH,hs,allEdges,originalHSet);
-
-    // triangles added by wedges
-    pbbslib::dyn_arr<uintE> wedgeTriangles = pbbslib::dyn_arr<uintE>(edges.size());
-    // triangles added not by h-set but by multiple added edges
-    pbbslib::dyn_arr<uintE> multiTriangles = pbbslib::dyn_arr<uintE>(edges.size());
-
-    par_for(0,edges.size(),[&](size_t i) {
-      wedgeTriangles.A[i] = 0;
-      multiTriangles.A[i] = 0;
-    });
-
-    // newly formed wedges
-
-    // STEP 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
-    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> newWedges = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
+  long long addEdgesStep2(sequence<std::pair<uintE,uintE>>& edges,sparse_table<std::pair<uintE,uintE>,bool,hash_pair>& allEdges,pbbslib::dyn_arr<uintE>& wedgeTriangles,pbbslib::dyn_arr<uintE>& multiTriangles,pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>& newWedges) {
 
     par_for(0,edges.size(),[&](size_t i) {
       uintE u = std::get<1>(edges[i]);
@@ -552,8 +497,20 @@ public:
       }
     });
 
+    uintE total = 0;
+    
+    wedgeTriangles.size = wedgeTriangles.capacity;
+    total += pbbs::reduce(wedgeTriangles.to_seq(),pbbs::addm<uintE>());
+    wedgeTriangles.del();
 
-    // STEP 3 - Find triangles formed with the H Set
+    multiTriangles.size = multiTriangles.capacity;
+    total += pbbs::reduce(multiTriangles.to_seq(),pbbs::addm<uintE>()) / 12;
+    multiTriangles.del();
+
+    return total;
+  }
+
+  long long addEdgesStep3(sequence<std::pair<uintE,uintE>>& edges,sparse_table<std::pair<uintE,uintE>,bool,hash_pair>& allEdges,sequence<uintE>& hs) {
     pbbslib::dyn_arr<uintE> hsetTriangles = pbbslib::dyn_arr<uintE>(edges.size());
     par_for(0,edges.size(),[&](size_t i) {
       hsetTriangles.A[i] = 0;
@@ -583,23 +540,85 @@ public:
       hsetTriangles.A[i] = pbbs::reduce(uvhsetTriangles.to_seq(),pbbs::addm<uintE>());
     });
 
-    // STEP 4, update the counts and the wedges
-
-    newWedges.size = newWedges.capacity;
-    wedgeTriangles.size = wedgeTriangles.capacity;
-    total += pbbs::reduce(wedgeTriangles.to_seq(),pbbs::addm<uintE>());
-    wedgeTriangles.del();
-
-    multiTriangles.size = multiTriangles.capacity;
-    total += pbbs::reduce(multiTriangles.to_seq(),pbbs::addm<uintE>()) / 12;
-    multiTriangles.del();
-
     hsetTriangles.size = hsetTriangles.capacity;
-    total += pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<uintE>()) / 6;
+    uintE total = pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<uintE>()) / 6;
     hsetTriangles.del();
+
+    return total;
+  }
+
+  /**
+  * Adds edges to the graph, which will also modify the H-Set and update the triangle counts
+  * It is consisted of 6 steps:
+  * Step 1 - Add edges in the HSet and Dynamic Symmetric Graph.
+  * Step 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
+  * STep 3 - Find triangles formed with the H Set
+  * Step 4 - Sum up all the triangles we have found
+  * Step 5 - Add in the newly formed wedges and adjust them according to the new modified HSet
+  * Step 6 - Clean up memory
+  *
+  * @param edges The sequence of edges that need to be added
+  */
+  void addEdges(sequence<std::pair<uintE,uintE>> edges) {
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset -> G -> existEdge(e.first, e.second); } );
+
+    // STEP 1 - Adjust the H Set
+
+    // AllEdges in the form of a sparse table, allowing O(1) lookup if an edge exists.
+    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(2 * edges.size(),std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
+    par_for(0,edges.size(),[&](size_t i) {
+      allEdges.insert(std::make_tuple(edges[i],true));
+      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
+    });
+
+    // The original HSet elements
+    sequence<uintE> originalH = hset -> getH();
+
+    hset -> insertEdges(edges);
+
+    // The new HSet elements
+    sequence<uintE> hs = hset -> getH();
+
+    // The original HSet elements in a sparse table, allowing O(1) lookup if an element was originally in the hset.
+    auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+
+    par_for(0,originalH.size(),[&](size_t i) {
+      originalHSet.insert(std::make_tuple(originalH[i],true));
+    });  
+
+    // Adjusts the wedges now that we have updated the HSet
+    adjustHSetWedges(originalH,hs,allEdges,originalHSet);
+
+    // triangles added by wedges
+    pbbslib::dyn_arr<uintE> wedgeTriangles = pbbslib::dyn_arr<uintE>(edges.size());
+    // triangles added not by h-set but by multiple added edges
+    pbbslib::dyn_arr<uintE> multiTriangles = pbbslib::dyn_arr<uintE>(edges.size());
+
+    par_for(0,edges.size(),[&](size_t i) {
+      wedgeTriangles.A[i] = 0;
+      multiTriangles.A[i] = 0;
+    });
+
+    // newly formed wedges
+    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> newWedges = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
+
+    // STEP 2 - Find all the triangles/wedges by either wedges or entities formed solely by the newly added edges
+    
+    long long step2Total = addEdgesStep2(edges,allEdges,wedgeTriangles,multiTriangles,newWedges);
+
+    // STEP 3 - Find triangles formed with the H Set
+    
+    long long step3Total = addEdgesStep3(edges,allEdges,hs);
+
+    // STEP 4, update the counts
+
+    total += step2Total;
+
+    total += step3Total;
 
     // STEP 5: Add in edges
 
+    newWedges.size = newWedges.capacity;
     sequence<std::pair<uintE,uintE>> allNewWedges = merge_sort(concatDynArr(newWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     addWedges(allNewWedges);
 
@@ -613,44 +632,7 @@ public:
   }
 
 
-  /**
-  * Removes edges from the graph, which will also modify the H-Set and update the triangle counts
-  * It is consisted of 6 steps:
-  * Step 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
-  * Step 2 - triangles removed with h-set
-  * STep 3 - Find triangles formed with the H Set
-  * Step 4 - Sum up all the tirangles we have found
-  * Step 5 - Remove the deleted wedges
-  * Step 6 - Memory Cleanups
-  * @param edges The sequence of edges that need to be added
-  */
-  void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
-
-    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return hset -> G -> existEdge(e.first, e.second); } );
-
-    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>
-        (2 * edges.size() + 1,std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
-    par_for(0,edges.size(),[&](size_t i) {
-      allEdges.insert(std::make_tuple(edges[i],true));
-      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
-    });
-
-    sequence<uintE> originalH = hset -> getH();
-
-    // triangles removed by wedges
-    pbbslib::dyn_arr<uintE> wedgeTriangles = pbbslib::dyn_arr<uintE>(edges.size());
-    // triangles removed not by h-set
-    pbbslib::dyn_arr<uintE> multiTriangles = pbbslib::dyn_arr<uintE>(edges.size());
-
-    par_for(0,edges.size(),[&](size_t i) {
-      wedgeTriangles.A[i] = 0;
-      multiTriangles.A[i] = 0;
-    });
-
-    // wedges that need to be removed
-    // STEP 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
-    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> removedWedges = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
-
+  long long removeEdgesStep1(sequence<std::pair<uintE,uintE>>& edges,sparse_table<std::pair<uintE,uintE>,bool,hash_pair>& allEdges,pbbslib::dyn_arr<uintE>& wedgeTriangles,pbbslib::dyn_arr<uintE>& multiTriangles,pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>& removedWedges) {
     par_for(0,edges.size(),[&](size_t i) {
       uintE u = std::get<1>(edges[i]);
       uintE v = std::get<0>(edges[i]);
@@ -797,9 +779,22 @@ public:
         removedWedgesU.del();
       }
     });
+    
+    uintE total = 0;
+
+    wedgeTriangles.size = wedgeTriangles.capacity;
+    total -= pbbs::reduce(wedgeTriangles.to_seq(),pbbs::addm<uintE>());
+    wedgeTriangles.del();
+    multiTriangles.size = multiTriangles.capacity;
+    total += pbbs::reduce(multiTriangles.to_seq(),pbbs::addm<uintE>()) / 12;
+    multiTriangles.del();
+
+    return total;
+  }
 
 
-    // STEP 2 - triangles removed with h-set
+  // TODO: Add the param stuff
+  long long removeEdgesStep2(sequence<std::pair<uintE,uintE>>& edges,sparse_table<std::pair<uintE,uintE>,bool,hash_pair>& allEdges,sequence<uintE>& originalH) {
     pbbslib::dyn_arr<long long> hsetTriangles = pbbslib::dyn_arr<long long>(edges.size());
     par_for(0,edges.size(),[&](size_t i) {
       hsetTriangles.A[i] = 0;
@@ -836,16 +831,67 @@ public:
 
     // STEP 3 - Updates all the counts
 
-    removedWedges.size = removedWedges.capacity;
-    wedgeTriangles.size = wedgeTriangles.capacity;
-    total -= pbbs::reduce(wedgeTriangles.to_seq(),pbbs::addm<uintE>());
-    wedgeTriangles.del();
-    multiTriangles.size = multiTriangles.capacity;
-    total += pbbs::reduce(multiTriangles.to_seq(),pbbs::addm<uintE>()) / 12;
-    multiTriangles.del();
+    
     hsetTriangles.size = hsetTriangles.capacity;
-    total += pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<long long>()) / 6;
+    uintE total = pbbs::reduce(hsetTriangles.to_seq(),pbbs::addm<long long>()) / 6;
     hsetTriangles.del();
+
+    return total;
+  }
+
+  /**
+  * Removes edges from the graph, which will also modify the H-Set and update the triangle counts
+  * It is consisted of 6 steps:
+  * Step 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
+  * Step 2 - triangles removed with h-set
+  * STep 3 - Find triangles formed with the H Set
+  * Step 4 - Sum up all the triangles we have found
+  * Step 5 - Remove the deleted wedges
+  * Step 6 - Memory Cleanups
+  * @param edges The sequence of edges that need to be added
+  */
+  void removeEdges(sequence<std::pair<uintE,uintE>> edges) {
+
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return hset -> G -> existEdge(e.first, e.second); } );
+
+    if(edges.size() == 0) return;
+
+    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>
+        (2 * edges.size(),std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
+    par_for(0,edges.size(),[&](size_t i) {
+      allEdges.insert(std::make_tuple(edges[i],true));
+      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,edges[i].first),true));
+    });
+
+    sequence<uintE> originalH = hset -> getH();
+
+    // triangles removed by wedges
+    pbbslib::dyn_arr<uintE> wedgeTriangles = pbbslib::dyn_arr<uintE>(edges.size());
+    // triangles removed not by h-set
+    pbbslib::dyn_arr<uintE> multiTriangles = pbbslib::dyn_arr<uintE>(edges.size());
+
+    par_for(0,edges.size(),[&](size_t i) {
+      wedgeTriangles.A[i] = 0;
+      multiTriangles.A[i] = 0;
+    });
+
+    // wedges that need to be removed
+    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> removedWedges = pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(2 * edges.size());
+
+    // STEP 1 - Finds all the triangles/wedges erased due to either the wedges or by the removed edges themselves
+
+    long long step1Total = removeEdgesStep1(edges,allEdges,wedgeTriangles,multiTriangles,removedWedges);
+
+    // STEP 2 - triangles removed with h-set
+
+    long long step2Total = removeEdgesStep2(edges,allEdges,originalH);
+
+    // STEP 3 - Updates all the counts
+
+    total += step1Total;
+
+    total += step2Total;
+
 
     // STEP 4 - Updates the HSet
 
@@ -853,7 +899,7 @@ public:
 
     sequence<uintE> hs = hset -> getH();
 
-    auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
+    auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(originalH.size() + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
     par_for(0,originalH.size(),[&](size_t i) {
       originalHSet.insert(std::make_tuple(originalH[i],true));
@@ -861,6 +907,7 @@ public:
 
     // STEP 5 - Remove wedges they no longer exist
 
+    removedWedges.size = removedWedges.capacity;
     sequence<std::pair<uintE,uintE>> allRemovedWedges = merge_sort(concatDynArr(removedWedges).to_seq(),[&](std::pair<uintE,uintE> a,std::pair<uintE,uintE> b) {return a > b;});
     removeWedges(allRemovedWedges);
     adjustHSetWedges(originalH,hs,allEdges,originalHSet); 
