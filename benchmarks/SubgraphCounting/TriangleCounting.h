@@ -546,7 +546,7 @@ public:
     return total;
   }
 
-  /*
+  /**
   * Step 3 of the addEdges process: Find triangles that have HSet nodes.
   *
   * @param edges a sequence of edges that are being added
@@ -859,7 +859,7 @@ public:
   }
 
 
-  /*
+  /**
   * Step 2 of the removeEdges process: Find triangles that have HSet nodes.
   *
   * @param edges a sequence of edges that are being removed
