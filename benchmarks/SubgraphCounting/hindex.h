@@ -28,8 +28,9 @@ class HSet {
     /**
      * Constructs HSet given a pointer to a dynamic graph
      *
-     * @param _G, an unweighted dynamic_symmetric_graph, graph does not have to be empty
-    */
+     * @param _G, an unweighted dynamic_symmetric_graph
+     *     graph does not have to be empty
+     */
     HSet(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) {
       G = _G;
       hindex = 0;
@@ -51,17 +52,21 @@ class HSet {
     virtual bool contains(uintE target) = 0;
 
     /**
-     * Given a batch of vertices, adds all of the new vertices to HSet in parallel
+     * Adds all of the new vertices in a given batch to HSet in parallel
      *
-     * @param vertices, sequence of vertices to be added, can contain existing vertices
+     * @param vertices, sequence of vertices to be added
+     *     can contain existing vertices (will be ignored)
+     *     CANNOT contain duplicate vertices in batch
      * @return the h-index after all the vertex insertions
      */
     virtual uintE insertVertices(pbbs::sequence<uintE> vertices) = 0;
 
     /**
-     * Given a batch of vertices in the graph, deletes all of the existing ones from HSet in parallel
+     * Deletes all of the existing vertices in batch from HSet in parallel
      *
-     * @param vertices, sequence of vertices to be deleted, can contain vertices that don't exist yet
+     * @param vertices, sequence of vertices to be deleted
+     *     can contain vertices that don't exist yet (will be ignored)
+     *     CANNOT contain duplicate vertices in batch
      * @return the h-index after all the vertex deletions
      */
     virtual uintE eraseVertices(pbbs::sequence<uintE> vertices) = 0;
@@ -72,7 +77,8 @@ class HSet {
      *
      * @param edges, sequence of edges to be added
      *      Adding edge u, v also adds edge v, u since the graph is symmetric
-     *      CANNOT contain duplicate  edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      CANNOT contain duplicate  edges
+     *          Filter with the getEdges() function from SubgraphCounting.cc
      *      Can contain edges that already exist (will just be ignored)
      *      Edges can contain new vertices (will be added automatically)
      * @return the h-index after adding all the edges
@@ -81,11 +87,12 @@ class HSet {
 
     /**
      * Given a batch edges, deletes all of the new edges in parallel
-     * Automatically removes any zero degree vertices from the graph after the deletion
+     * Automatically removes any zero degree vertices after the deletion
      *
      * @param edges, sequence of edges to be erased
      *      Erasing edge u, v also erases edge v, u since the graph is symmetric
-     *      CANNOT contain duplicate edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      CANNOT contain duplicate edges
+     *          Filter with the getEdges() function from SubgraphCounting.cc
      *      Can contain edges that don't exist (will be ignored)
      * @return the h-index after deleting all the edges
      */
