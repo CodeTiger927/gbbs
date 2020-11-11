@@ -82,7 +82,7 @@ pbbslib::dyn_arr<std::pair<uintE,uintE>> concat2DynArrs(
  */
 class TriangleCounting {
 private:
-  typedef std::pair<uintE,uintE> edgeType;
+  using edgeType = std::pair<uintE,uintE>;
 
   HSet* hset;
   sparse_table<edgeType,uintE,hash_pair> wedges;
