@@ -3,7 +3,8 @@
 #include "hindex.h"
 
 /**
- * HSet implementation that dynamically maintains H in parallel using a dyn_arr to bucket the vertices
+ * HSet implementation that dynamically maintains H in parallel
+ * Uses a dyn_arr to bucket the vertices
  *
  * H stores h vertices, where h is the largest number such
  * that there are at least h vertices with degree greater than or equal to h
@@ -13,7 +14,7 @@ class HSetDynArr : public HSet {
   private:
 
     uintE bSize; //Number of elements with degree hindex and are inside H
-    pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C; //Sorts all vertices by degree
+    pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*> C; //Groups vertices by degree
 
     /**
      * Given a batch of vertices, adds all of them to HSet
@@ -23,7 +24,8 @@ class HSetDynArr : public HSet {
      *     All vertices in batch must be in the graph
      *     Can be empty
      *     CANNOT add vertex if it is already tracked by HSet (e.g. present in C)
-     * @param sorted, optional oolean determining if batch is already sorted by degree in nonascending order
+     * @param sorted, optional boolean
+     *     Is batch already sorted by degree in nonascending order
      *     Set to false by default
      *     Saves time by not resorting batch if it's already sorted
      */
@@ -32,24 +34,26 @@ class HSetDynArr : public HSet {
       //Exits if there are no vertices in batch
       if (batch.size() == 0) return this->hindex;
 
-      //Sortes vertices by degree in descending order  
+      //Sorts vertices by degree in nonascending order (if necessary)
       pbbs::sequence<uintE> sortedBatch;
       if (!sorted) {
-        sortedBatch = integer_sort(batch, [&] (uintE v) { return this->G->get_vertex(v).degree; }).rslice();
+        sortedBatch = integer_sort(batch, [&] (uintE v) {
+          return this->G->get_vertex(v).degree;
+        }).rslice();
       }
-
       else {
         sortedBatch = batch;
       }
       batch.clear();
 
-      //Stores degrees in descending order
+      //Stores degrees of vertices in nonascending order
       sequence<uintE> deg = pbbs::sequence<uintE>(sortedBatch.size());
       par_for(0, sortedBatch.size(), [&] (size_t i) {
         deg[i] = deg[i] = this->G->get_vertex(sortedBatch[i]).degree;
       });
 
       //Adds additional space to C if it is too small
+      //Makes sure it has room for the largest degree
       size_t oldSize = C.size;
       C.size = std::max((uintE) C.size, deg[0] + 1);
       if (C.size >= C.capacity) {
@@ -59,22 +63,27 @@ class HSetDynArr : public HSet {
         });
       }
 
-      //--------------------------Updating Variables--------------------------//
-      //Current number of vertices with degree >= |H| is |H| - |B| + |C[|H|]|
+      //----------------------Updating Variables----------------------//
+      //Current number of vertices with degree >= h is h - |B| + |C[h]|
       uintE aboveH = this->hindex - bSize;
-      if (this->hindex < C.size && C.A[this->hindex] != nullptr) aboveH += C.A[this->hindex]->size;
+      if (this->hindex < C.size && C.A[this->hindex] != nullptr) {
+        aboveH += C.A[this->hindex]->size;
+      }
 
-      //Number of vertices being added in batch with degree >= current |H|
-      uintE added = pbbs::binary_search(deg, [&] (uintE x) { //Number of vertices that are above new hindex
+      //Number of vertices being added in batch with degree >= current h
+      uintE added = pbbs::binary_search(deg, [&] (uintE x) {
         return x >= this->hindex;
       });
 
       aboveH += added;
 
-      addToC(sortedBatch, deg); //Updates C
+      addToC(sortedBatch, deg); //Updates C with new vertices
 
-      //--------------------------Compute H-index--------------------------//
-      //Begins constructing sum array where each number indicates the number of vertices lost in H if hindex increases
+      //----------------------Compute H-index----------------------//
+      //Begins constructing sum array
+      //Each number indicates the number of vertices H loses if hindex increases
+
+      //Stores the sizes of each entry of C
       pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(sortedBatch.size() + 1);
       par_for(0, sortedBatch.size(), [&] (size_t i) {
         if (this->hindex + i < C.size && C.A[this->hindex + i] != nullptr) {
@@ -92,15 +101,16 @@ class HSetDynArr : public HSet {
         }
       });
 
-      //Creates the binary array described as M
-      //Create M array
+      //Creates the binary array M
+      //True indicates that h can lose those vertices and still be valid
       pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size());
     
+      //Still valid h when it increases by i + 1
       par_for(0, M.size(), [&] (size_t i) {
         M[i] = aboveH - sum[i] >= this->hindex + i + 1;
       });
 
-      //Find index of first 0
+      //Find index of first false
       pbbs::sequence<size_t> indexM = pbbs::sequence<size_t>(M.size());
       par_for(0, M.size(), [&] (size_t i) {
         indexM[i] = !M[i] ? i : UINT_E_MAX;
@@ -108,29 +118,33 @@ class HSetDynArr : public HSet {
       uintE hindexIncrease = pbbslib::reduce_min(indexM);
       if (hindexIncrease == UINT_E_MAX) hindexIncrease = sortedBatch.size();
 
+      //Update h
       this->hindex += hindexIncrease;
 
-      //--------------------------Updating Variables--------------------------//
+      //----------------------Updating Variables----------------------//
 
-      //Calculating B = hindex + C[hindex] - aboveH
+      //If h does not increase, aboveH does not change
       if (hindexIncrease == 0) {
+        //If C[h] is empty, B must also be empty
         if (this->hindex >= C.size || C.A[this->hindex] == nullptr) bSize = 0;
         else {
+          //Calculate |B| = hindex + C[h] - aboveH
           bSize = this->hindex + C.A[this->hindex]->size - aboveH;
         }
       }
       else {
+        //Update aboveH because h just increased and lost some vertices
         aboveH -= sum[hindexIncrease - 1];
 
+        //If C[h] is empty, B must also be empty
         if (this->hindex >= C.size || C.A[this->hindex] == nullptr) bSize = 0;
         else {
+          //Calculate |B| = hindex + C[h] - aboveH
           bSize = this->hindex + C.A[this->hindex]->size - aboveH;
         }
       }
-    
-      //Slight variation to hindex paper - C will store all vertices (instead of the vertices not in B)
 
-
+      //Delete unused arrays before exiting
       deg.clear();
       sum.clear();
 
@@ -144,45 +158,58 @@ class HSetDynArr : public HSet {
      * @param batch, sequence of vertices to be added to HSet
      *     All vertices in batch must be in the graph and in HSet
      *     Can be empty
-     *     CANNOT remove a vertex if it is not tracked by HSet (e.g. not present in C)
-     * @param sorted, optional boolean determining if batch is already sorted by degree in nonascending order
+     *     CANNOT remove a vertex if it is not tracked by HSet
+     * @param sorted, optional boolean
+     *     Is batch already sorted by degree in nonascending order
      *     Set to false by default
      *     Saves time by not resorting batch if it's already sorted
      */
     uintE erase(sequence<uintE> batch, bool sorted = false) {
 
+      //Sorts vertices by degree in nonascending order (if needed) 
       pbbs::sequence<uintE> sortedBatch;
       if (!sorted) {
-        sortedBatch = integer_sort(batch, [&] (uintE v) { return this->G->get_vertex(v).degree; }).rslice();
+        sortedBatch = integer_sort(batch, [&] (uintE v) {
+          return this->G->get_vertex(v).degree;
+        }).rslice();
       }
       else {
         sortedBatch = batch;
       } 
       batch.clear();
-      //Stores degrees and sorts in ascending order
+
+      //Stores degrees of vertices in nonascending order
       sequence<uintE> deg = pbbs::sequence<uintE>(sortedBatch.size());
       par_for(0, sortedBatch.size(), [&] (size_t i) {
         deg[i] = this->G->get_vertex(sortedBatch[i]).degree;
       });
 
-
-      //--------------------------Updating Variables--------------------------//
+      //----------------------Updating Variables----------------------//
+      //Current number of vertices with degree >= h is h - |B| + |C[h]|
       uintE aboveH = this->hindex - bSize;
 
-      if (this->hindex < C.size && C.A[this->hindex] != nullptr) aboveH += C.A[this->hindex]->size;
+      if (this->hindex < C.size && C.A[this->hindex] != nullptr) {
+        aboveH += C.A[this->hindex]->size;
+      }
 
-      uintE removed = pbbs::binary_search(deg, [&] (uintE x) { //Number of vertices that are above new hindex
+      //Number of vertices being added in batch with degree >= current h
+      uintE removed = pbbs::binary_search(deg, [&] (uintE x) {
         return x >= this->hindex;
       });
 
       aboveH -= removed;
 
-      removeFromC(sortedBatch, deg);
+      removeFromC(sortedBatch, deg); //Updates C by removing vertices
 
 
-      //--------------------------Compute H-index--------------------------//
-      //Compute prefix sum
-      pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(std::min(sortedBatch.size(), this->hindex));
+      //----------------------Compute H-index----------------------//
+      //Begins constructing sum array
+      //Each number indicates the number of vertices H gains if h decreases
+
+      //Stores the sizes of each entry of C
+      //Makes sure sum array does not store sizes for negative degrees
+      size_t size = std::min(sortedBatch.size(), this->hindex)
+      pbbs::sequence<uintE> sum = pbbs::sequence<uintE>(size);
       par_for(0, sum.size(), [&] (size_t i) {
         if (this->hindex - i - 1 < C.size && C.A[this->hindex - i - 1] != nullptr) { 
           sum[i] = C.A[this->hindex - i - 1]->size;
@@ -190,17 +217,19 @@ class HSetDynArr : public HSet {
         else sum[i] = 0;
       });
 
+      //Computes Prefix Sum (note scan_add_inplace is exclusive)
       pbbslib::scan_add_inplace(sum);
-
       par_for(0, sum.size(), [&] (size_t i) {
         if (this->hindex - i - 1 < C.size && C.A[this->hindex - i - 1] != nullptr) {
-          sum[i] += C.A[this->hindex - i - 1]->size;
+          sum[i] += C.A[this->hindex - i - 1]->size; //Compute inclusive sum
         }
       });
 
       //Create boolean M array
-      pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size() + 1); //True means hindex works, need to find first true
+      //True indicates that h is valid after gaining those vertices
+      pbbs::sequence<bool> M = pbbs::sequence<bool>(sum.size() + 1);
 
+      //Is h valid after decreasing h by i
       M[0] = (aboveH >= this->hindex);
       par_for(1, M.size(), [&] (size_t i) {
         M[i] = (aboveH + sum[i - 1] >= this->hindex - i);
@@ -214,21 +243,27 @@ class HSetDynArr : public HSet {
       uintE hindexDecrease = pbbslib::reduce_min(indexM);
       if (hindexDecrease == UINT_E_MAX) hindexDecrease = sortedBatch.size();
 
+      //Update h
       this->hindex -= hindexDecrease;
 
-      //--------------------------Updating Variables--------------------------//
-      //Calculating B = hindex + C[hindex] - aboveH
+      //----------------------Updating Variables----------------------//
+      //If h does not increase, aboveH does not change
       if (hindexDecrease == 0) {
+        //If C[h] is empty, B must also be empty
         if (this->hindex >= C.size || C.A[this->hindex] == nullptr) bSize = 0;
         else {
+          //Calculating B = hindex + C[hindex] - aboveH
           bSize = this->hindex + C.A[this->hindex]->size - aboveH;
         }
       }
       else {
+        //Update aboveH because h just increased and lost some vertices
         aboveH += sum[hindexDecrease - 1];
 
+        //If C[h] is empty, B must also be empty
         if (this->hindex >= C.size || C.A[this->hindex] == nullptr) bSize = 0;
         else {
+          //Calculate |B| = hindex + C[h] - aboveH
           bSize = this->hindex + C.A[this->hindex]->size - aboveH;
         }
       }
@@ -238,7 +273,9 @@ class HSetDynArr : public HSet {
   
 
     /**
-     * Given a batch of vertices and their corresponding degrees, dynamically adds all of the vertices to C
+     * Given a batch of vertices and their corresponding degrees
+     *   dynamically adds all of the vertices to C
+     *
      * Automatically resizes everything by itself
      * 
      * @param batch, sequence of vertices to be added to C
@@ -248,34 +285,36 @@ class HSetDynArr : public HSet {
      */
     void addToC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
 
-      /*    
-      //Subraction
-      sequence<bool> difference = pbbs::sequence<bool>(batch.size() - 1);
-    
-      par_for(0, deg.size() - 1, [&] (size_t i) {
-        difference[i] = (deg[i] != deg[i + 1]);  
-      });
-      */
-      sequence<size_t> idx = pbbs::sequence<size_t>(batch.size());
+      //Stores array indices
+      //Gives the ending index of a block of vertices with the same degree
 
+      //Stores all indices (0, 1, ..., |batch|) in idx
+      sequence<size_t> idx = pbbs::sequence<size_t>(batch.size());
       par_for(0, batch.size(), [&] (size_t i) {
         idx[i] = i;
       });
 
-      auto f = [&] (size_t i) { return i == batch.size() - 1 || deg[i] != deg[i + 1]; };
+      //Filters idx so there are only indices with degree different than the next 
+      auto f = [&] (size_t i) { 
+        return i == batch.size() - 1 || deg[i] != deg[i + 1];
+      };
       auto indices = pbbs::filter(idx, f);
       idx.clear();
 
-      //Uses indices sequence to know the index of last entry for each clustered deg
+      //Uses indices sequence to know the index range of each block of
+      //  of vertices with the same degree
       par_for(0, indices.size(), [&] (size_t i) {
         size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
         size_t end = indices[i] + 1;
 
+        //extra stores the vertices that should be added
         pbbs::sequence<uintE> extra = batch.slice(start, end);
 
+        //If there isn't an entry for this degree, create one
         if (C.A[deg[indices[i]]] == nullptr) {
           C.A[deg[indices[i]]] = new pbbslib::dyn_arr<uintE>(1);
         }
+        //Add all the new vertices
         C.A[deg[indices[i]]]->add(extra);
 
         extra.clear();
@@ -284,7 +323,9 @@ class HSetDynArr : public HSet {
     }
 
     /**
-     * Given a batch of vertices and their corresponding degrees, dynamically removes all of the vertices from C
+     * Given a batch of vertices and their corresponding degrees
+     *   dynamically removes all of the vertices from C
+     *
      * Automatically resizes everything by itself
      * 
      * @param batch, sequence of vertices to be removed from C
@@ -294,20 +335,30 @@ class HSetDynArr : public HSet {
      */
     void removeFromC(pbbs::sequence<uintE> batch, pbbs::sequence<uintE> deg) {
 
+      //Stores array indices
+      //Gives the ending index of a block of vertices with the same degree
+
+      //Stores all indices (0, 1, ..., |batch|) in idx
       sequence<size_t> idx = pbbs::sequence<size_t>(batch.size());
 
       par_for(0, batch.size(), [&] (size_t i) {
         idx[i] = i;
       });
 
-      auto f = [&] (size_t i) { return i == batch.size() - 1 || deg[i] != deg[i + 1]; };
+      //Filters idx so there are only indices with degree different than the next 
+      auto f = [&] (size_t i) {
+        return i == batch.size() - 1 || deg[i] != deg[i + 1];
+      };
+
       auto indices = pbbs::filter(idx, f);
-      //Uses indices sequence to know the index of last entry for each clustered deg
+      //Uses indices sequence to know the index range of each block of
+      //  of vertices with the same degree
       par_for(0, indices.size(), [&] (size_t i) {
         size_t start = (i == 0 ? 0 : indices[i - 1] + 1);
         size_t end = indices[i] + 1;
         pbbs::sequence<uintE> extra = batch.slice(start, end);
       
+        //Filter out all vertices to be deleted
         auto remove = [&] (uintE element) {
           for (size_t i = 0; i < extra.size(); i++) {
             if (element == extra[i]) return false;
@@ -315,29 +366,57 @@ class HSetDynArr : public HSet {
           return true;
         };
 
+        //Removing these vertices does not affect B
         if (deg[indices[i]] != this->hindex) {
 
-          auto filtered = pbbs::new_array_no_init<uintE>(C.A[deg[indices[i]]]->capacity);
-          size_t removed = pbbslib::filter_seq(C.A[deg[indices[i]]]->A, filtered, C.A[deg[indices[i]]]->size, remove);
+          //Filter out elements in the entry of C
+          auto filtered = pbbs::new_array_no_init<uintE>(
+            C.A[deg[indices[i]]]->capacity
+          );
 
-        
+          size_t removed = pbbslib::filter_seq(
+            C.A[deg[indices[i]]]->A, 
+            filtered, C.A[deg[indices[i]]]->size,
+            remove
+          );
+
+          //Free the old entry
           if (C.A[deg[indices[i]]]->alloc) {
             pbbslib::free_array(C.A[deg[indices[i]]]->A);
           }
 
+          //Update the new entry and its sizes
           C.A[deg[indices[i]]]->A = filtered;
           C.A[deg[indices[i]]]->size = removed;
 
         }
-        else {
-          auto filtered = pbbs::new_array_no_init<uintE>(C.A[deg[indices[i]]]->capacity);
 
-          uintE removedFromB = pbbslib::filter_seq(C.A[deg[indices[i]]]->A, filtered, bSize, remove); 
-          size_t removed = pbbslib::filter_seq(&(C.A[deg[indices[i]]]->A)[bSize], &(filtered)[removedFromB], C.A[deg[indices[i]]]->size - bSize, remove);
+        //Removing these vertices possibly affects B
+        else {
+          auto filtered = pbbs::new_array_no_init<uintE>(
+            C.A[deg[indices[i]]]->capacity
+          );
+
+          //Filter B, the first |B| elements of the entry
+          uintE removedFromB = pbbslib::filter_seq(
+            C.A[deg[indices[i]]]->A, filtered, bSize,
+            remove
+          );
+ 
+          //Filter the rest of the entry
+          size_t removed = pbbslib::filter_seq(
+            &(C.A[deg[indices[i]]]->A)[bSize],
+            &(filtered)[removedFromB],
+            C.A[deg[indices[i]]]->size - bSize,
+            remove
+          );
         
+          //Free the old entry
           if (C.A[deg[indices[i]]]->alloc) {
             pbbslib::free_array(C.A[deg[indices[i]]]->A);
           }
+     
+          //Update the new entry and its sizes (including the size of B)
           C.A[deg[indices[i]]]->A = filtered;
           C.A[deg[indices[i]]]->size = removed + removedFromB;
 
@@ -359,20 +438,31 @@ class HSetDynArr : public HSet {
     }
 
     /**
-     * Helper function that shrinks the size of C so it doesn't take too much memory 
+     * Helper function that shrinks the size of C
+     *   so it doesn't take too much memory 
      */
     void adjust() {
-      /* Saves memory, more time - Sparse Graphs
+      /* Saves memory, uses more time - better for sparse graphs
+
+      //Finds the largest degree in the graph and sets that to be the size
       for (; C.size / 2 > 0; C.size--) {
         if (C.A[C.size - 1] != nullptr && C.A[C.size - 1]->size != 0) {
           break;
         }
       }
       */
-    
-      C.size = std::min(this->G->n, C.size); //More memory, saves time - Dense Graphs
+
+      //Uses more memory, but saves time - better for dense graphs
+
+      //Assumes size (the largest degree) is at most the number of vertices
+      C.size = std::min(this->G->n, C.size);
+
+      //If it takes up less than the capacity
       if (C.size < C.capacity / 4 && 2 * C.size > 1) {
-        auto nA = pbbs::new_array_no_init<pbbslib::dyn_arr<uintE>*>(std::max(2 * C.size, (size_t) 1));
+        auto nA = pbbs::new_array_no_init<pbbslib::dyn_arr<uintE>*>(
+          std::max(2 * C.size, (size_t) 1)
+        );
+
         par_for(0, C.size, [&] (size_t i) {
           nA[i] = C.A[i];
         });
@@ -380,12 +470,11 @@ class HSetDynArr : public HSet {
           nA[i] = nullptr;
         });
         if (C.alloc) {
-         //pbbslib::free_array(C.A);
+          pbbslib::free_array(C.A);
         }
         C.A = nA;
         C.capacity = std::max(2 * C.size, (size_t) 1);
       }
-      //Alternative is to set C.size to min(number of vertices, C.size). Faster but could waste space on really sparse graphs
     }
 
 
@@ -394,34 +483,39 @@ class HSetDynArr : public HSet {
     /**
      * Constructs HSetDynArr given a pointer to a dynamic graph
      *
-     * @param _G, an unweighted dynamic_symmetric_graph, graph does not have to be empty
+     * @param _G, an unweighted dynamic_symmetric_graph
+     *     graph does not have to be empty
      */
-    HSetDynArr(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) : HSet(_G) {
+    HSetDynArr(dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>* _G) : 
 
-      bSize = 0;
+      HSet(_G) {
 
-      C = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(std::max(2 * this->G->n, (size_t) 1));
+        bSize = 0;
 
-      par_for(0, C.capacity, [&] (size_t i) { 
-        C.A[i] = nullptr;
-      });
- 
-      //Add all starting graph elements into HSet
-      if (_G->n > 0) {
-        auto start = pbbs::sequence<uintE>(_G->n);
-        par_for(0, start.size(), [&] (size_t i) {
-          start[i] = i;
+        C = pbbslib::dyn_arr<pbbslib::dyn_arr<uintE>*>(std::max(2 * this->G->n, (size_t) 1));
+
+        par_for(0, C.capacity, [&] (size_t i) { 
+          C.A[i] = nullptr;
         });
+ 
+        //Add all starting graph elements into HSet
+        if (_G->n > 0) {
+          auto start = pbbs::sequence<uintE>(_G->n);
+          par_for(0, start.size(), [&] (size_t i) {
+            start[i] = i;
+          });
 
-        insert(start);
+          insert(start);
+        }
+
       }
 
-    }
-
     /**
-     * Given a batch of vertices, adds all of the new vertices to HSet in parallel
+     * Adds all of the new vertices in a given batch to HSet in parallel
      *
-     * @param vertices, sequence of vertices to be added, can contain existing vertices (will just be ignored)
+     * @param vertices, sequence of vertices to be added
+     *     can contain existing vertices (will be ignored)
+     *     CANNOT contain duplicate vertices in batch
      * @return the h-index after all the vertex insertions
      */
     uintE insertVertices(sequence<uintE> vertices) {
@@ -432,9 +526,11 @@ class HSetDynArr : public HSet {
     }
 
     /**
-     * Given a batch of vertices in the graph, deletes all of the existing ones from HSet in parallel
+     * Deletes all of the existing vertices in batch from HSet in parallel
      *
-     * @param vertices, sequence of vertices to be deleted, can contain vertices that don't exist yet (will just be ignored)
+     * @param vertices, sequence of vertices to be deleted
+     *     can contain vertices that don't exist yet (will be ignored)
+     *     CANNOT contain duplicate vertices in batch
      * @return the h-index after all the vertex deletions
      */
     uintE eraseVertices(sequence<uintE> vertices) {
@@ -450,25 +546,33 @@ class HSetDynArr : public HSet {
      *
      * @param edges, sequence of edges to be added
      *      Adding edge u, v also adds edge v, u since the graph is symmetric
-     *      CANNOT contain duplicate  edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      CANNOT contain duplicate  edges
+     *          Filter with the getEdges() function from SubgraphCounting.cc
      *      Can contain edges that already exist (will just be ignored)
      *      Edges can contain new vertices (will be added automatically)
      * @return the h-index after adding all the edges
      */
     uintE insertEdges(sequence<std::pair<uintE, uintE>> edges) {
 
-      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !this->G->existEdge(e.first, e.second); } );
+      //Filters edges so it only adds ones that don't exist yet
+      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) {
+        return !this->G->existEdge(e.first, e.second);
+      });
 
-      //Get unique vertices
+      //Gets all vertices of all edges (contains duplicates)
       sequence<uintE> vertices = sequence<uintE>(2 * existEdges.size());
       par_for(0, existEdges.size(), [&] (size_t i) {
        vertices[2 * i] = existEdges[i].first;
        vertices[(2 * i) + 1] = existEdges[i].second; 
       });
 
-      pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) { return v; });
+      //Sorts vertices
+      pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) {
+        return v;
+      });
       vertices.clear();
 
+      //Filters so there are only unique vertices
       auto vTemp = sequence<uintE>(sortedV.size(), [&] (size_t i) {
         if(i == 0) {
           return sortedV[i];
@@ -484,20 +588,23 @@ class HSetDynArr : public HSet {
       });
       sortedV.clear();
 
-      auto uniqueVertices = filter(vTemp, [&] (uintE i) { return (i != UINT_E_MAX); } );
+      auto uniqueVertices = filter(vTemp, [&] (uintE i) {
+        return (i != UINT_E_MAX);
+      });
       vTemp.clear();
 
-      //Add vertices that don't exist yet
+      //Find vertices that don't exist yet
       pbbs::sequence<uintE> newVertices = filter(uniqueVertices, [&] (uintE v) { 
         if (v < this->G->existVertices.size) return !this->G->existVertices.A[v];
         else return true;
       });
 
+      //Adds them to HSet and graph
       if (newVertices.size() != 0) insertVertices(newVertices);
 
-      erase(uniqueVertices);
-      this->G->batchAddEdges(existEdges);
-      insert(uniqueVertices);
+      erase(uniqueVertices); //Removes from HSet
+      this->G->batchAddEdges(existEdges); //Updates graph
+      insert(uniqueVertices); //Re-adds back into HSet
 
       uniqueVertices.clear();
       adjust();
@@ -506,28 +613,36 @@ class HSetDynArr : public HSet {
 
     /**
      * Given a batch edges, deletes all of the new edges in parallel
-     * Automatically removes any zero degree vertices from the graph after the deletion
+     * Automatically removes any zero degree vertices after the deletion
      *
      * @param edges, sequence of edges to be erased
      *      Erasing edge u, v also erases edge v, u since the graph is symmetric
-     *      CANNOT contain duplicate edges (use the getEdges() function from SubgraphCounting.cc to make sure)
+     *      CANNOT contain duplicate edges
+     *          Filter with the getEdges() function from SubgraphCounting.cc
      *      Can contain edges that don't exist (will be ignored)
      * @return the h-index after deleting all the edges
      */
     uintE eraseEdges(sequence<std::pair<uintE, uintE>> edges) {
     
-      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return this->G->existEdge(e.first, e.second); } );
+      //Filters edges so it only adds ones that don't exist yet
+      auto existEdges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) {
+        return this->G->existEdge(e.first, e.second);
+      });
 
-      //Get unique vertices
+      //Gets all vertices of all edges (contains duplicates)
       sequence<uintE> vertices = sequence<uintE>(2 * existEdges.size());
       par_for(0, existEdges.size(), [&] (size_t i) {
        vertices[2 * i] = existEdges[i].first;
        vertices[(2 * i) + 1] = existEdges[i].second; 
       });
 
-      pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) { return v; });
+      //Sorts vertices
+      pbbs::sequence<uintE> sortedV = integer_sort(vertices, [&] (uintE v) {
+        return v;
+      });
       vertices.clear();
 
+      //Filters so there are only unique vertices
       auto vTemp = sequence<uintE>(sortedV.size(), [&] (size_t i) {
         if(i == 0) {
           return sortedV[i];
@@ -543,18 +658,14 @@ class HSetDynArr : public HSet {
       });
       sortedV.clear();
 
-      auto uniqueVertices = filter(vTemp, [&] (uintE i) { return (i != UINT_E_MAX); } );
+      auto uniqueVertices = filter(vTemp, [&] (uintE i) {
+        return (i != UINT_E_MAX);
+      });
       vTemp.clear();
 
-      auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>(existEdges.size(), [&] (size_t i) {
-        if (existEdges[i].first > existEdges[i].second) return std::make_pair(existEdges[i].second, existEdges[i].first);
-        else return existEdges[i];
-      });
-
-
-      erase(uniqueVertices);
-      this->G->batchRemoveEdges(existEdges);
-      insert(uniqueVertices);
+      erase(uniqueVertices); //Removes from HSet
+      this->G->batchRemoveEdges(existEdges); //Updates edges
+      insert(uniqueVertices); //Re-adds to HSet
 
       auto toRemove = pbbs::filter(uniqueVertices, [&] (uintE v) {
         if (v < this->G->existVertices.size) {
@@ -573,14 +684,20 @@ class HSetDynArr : public HSet {
      * Returns a boolean that determines if a vertex belongs to H or not
      *
      * @param target, the vertex in question
-           target does not have to be in the graph (function will return false)
      * @return whether or not target is in H
      */
     bool contains(uintE target) {
-      if (target >= this->G->existVertices.size || !this->G->existVertices.A[target]) return false;
+      //False if vertex does not exist
+      if (target >= this->G->existVertices.size || !this->G->existVertices.A[target]) {
+        return false;
+      }
+
       uintE deg = this->G->get_vertex(target).degree;
 
+      //If degree > h, it is definitely in H
       if (deg > this->hindex) return true;
+
+      //If degree == h, check that it is in B
       else if (deg == this->hindex) {
         for (size_t i = 0; i < bSize; i++) {
           if (C.A[this->hindex]->A[i] == target) return true;
@@ -595,10 +712,12 @@ class HSetDynArr : public HSet {
      * @return sequence of all the vertices in H
      */
     pbbs::sequence<uintE> getH() {
+      //Return empty sequence if h is 0
       if (this->hindex == 0) {
         return pbbs::sequence<uintE>(0);
       }
 
+      //Find the size of each entry in C
       auto prefixSum = pbbs::sequence<uintE>(C.size - hindex - 1);
       par_for(0, prefixSum.size(), [&] (size_t i) {
         if (C.A[this->hindex + i + 1] != nullptr) {
@@ -607,8 +726,11 @@ class HSetDynArr : public HSet {
         else prefixSum[i] = 0;
       });
 
+      //Take exclusive prefix sum to find where each block of
+      //  same degree vertices start 
       pbbslib::scan_add_inplace(prefixSum);
 
+      //Offset everything by |B| since that will come first
       par_for(0, prefixSum.size(), [&] (size_t i) {
         prefixSum[i] += bSize;
       });
@@ -623,7 +745,7 @@ class HSetDynArr : public HSet {
         });
       }
 
-      //Add rest of vertices
+      //Add rest of vertices (using the prefix sum to find where they go)
       par_for(0, prefixSum.size(), [&] (size_t i) {
         if (C.A[this->hindex + i + 1] != nullptr) {
           uintE offSet = prefixSum[i];
@@ -640,9 +762,12 @@ class HSetDynArr : public HSet {
      * Frees all data structures used in HSet
      */
     void del() {
+      //Frees each entry in C
       par_for(0, C.size, [&] (size_t i) {
         if (C.A[i] != nullptr) pbbslib::free_array(C.A[i]->A);
       });
+
+      //Frees entire C array
       pbbslib::free_array(C.A);
     }
 
