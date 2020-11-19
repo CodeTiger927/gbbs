@@ -182,18 +182,14 @@ struct dynamic_symmetric_graph {
   void batchAddVertices(sequence<uintE> & vertices) {
 
     size_t size = vertices.size();
-    uintE ma = pbbs::reduce(vertices,pbbs::maxm<uintE>());
-    adjustVdata(std::max((size_t)ma,v_data.capacity));
-
+    uintE maxDegree = pbbs::reduce(vertices,pbbs::maxm<uintE>());
+    adjustVdata(std::max((size_t)maxDegree,v_data.capacity));
 
     pbbs::sequence<uintE> existingVertices = pbbs::filter(vertices,[&](uintE i){
       if (i < existVertices.size) return !existVertices.A[i];
       return true;
     });
 
-    // cout << existVertices.capacity << " " << ma << endl;
-
-    // cout << existingVertices.size() << endl;
     size_t sumV = existingVertices.size();
 
     par_for(0,sumV,1,[&](size_t i) {
@@ -204,7 +200,7 @@ struct dynamic_symmetric_graph {
       v_data.A[id].degree = 0;
       v_data.A[id].stored = 0;
     });
-    n = std::max(this -> n,(size_t)ma + 1);
+    n = std::max(this -> n,(size_t)maxDegree + 1);
     v_data.size = n;
     existVertices.size = n;
   }
@@ -227,17 +223,16 @@ struct dynamic_symmetric_graph {
   * @param edges the list of nodes that will be u's neighbors
   */
   void batchAddEdges(uintE u,sequence<uintE> edges) {
-    pbbs::sequence<uintE> ds = pbbs::filter(edges,[&](uintE i){return !existEdge(u,i);});
-    uintE sumW = ds.size();
+    pbbs::sequence<uintE> filteredEdges = pbbs::filter(edges,[&](uintE i){return !existEdge(u,i);});
 
-    this -> m += sumW;
+    this -> m += filteredEdges.size();
 
-    v_data.A[u].degree += ds.size();
-    v_data.A[u].stored += ds.size();
-    adjustNeighbors(u, sumW);
+    v_data.A[u].degree += filteredEdges.size();
+    v_data.A[u].stored += filteredEdges.size();
+    adjustNeighbors(u, filteredEdges.size());
 
-    par_for(0,ds.size(),1,[&](size_t i) {
-      uintE v = ds[i];
+    par_for(0,filteredEdges.size(),1,[&](size_t i) {
+      uintE v = filteredEdges[i];
       v_data.A[v].degree++;
       v_data.A[v].stored++;
       adjustNeighbors(v);
@@ -256,17 +251,16 @@ struct dynamic_symmetric_graph {
   */
   void batchAddEdges(sequence<std::pair<uintE,uintE>> edges) {
     
-    sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
-    
-    uintE sumW = ds.size();
+    sequence<std::pair<uintE,uintE>> filteredEdges = filter(edges,[&](std::pair<uintE,uintE> i){return !existEdge(i.first,i.second);});
+  
 
-    this -> m += sumW;
+    this -> m += filteredEdges.size();
 
-    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * ds.size(),[&](size_t i) {
+    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * filteredEdges.size(),[&](size_t i) {
       if(i % 2) {
-        return std::make_pair(ds[i / 2].first,ds[i / 2].second);
+        return std::make_pair(filteredEdges[i / 2].first,filteredEdges[i / 2].second);
       }else{
-        return std::make_pair(ds[i / 2].second,ds[i / 2].first);
+        return std::make_pair(filteredEdges[i / 2].second,filteredEdges[i / 2].first);
       }
     });
 
@@ -285,8 +279,8 @@ struct dynamic_symmetric_graph {
         }
       }
     });
-    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].degree += 2 * ds.size();
-    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].stored += 2 * ds.size();
+    if(all.size() > 0) v_data.A[all[2 * filteredEdges.size() - 1].first].degree += 2 * filteredEdges.size();
+    if(all.size() > 0) v_data.A[all[2 * filteredEdges.size() - 1].first].stored += 2 * filteredEdges.size();
     par_for(0,all.size(),[&](size_t i) {
       std::pair<uintE,uintE> cur = all[i];
       if(i != 0) {
@@ -340,15 +334,14 @@ struct dynamic_symmetric_graph {
   * @param edges the list of nodes that will cease to be u's neighbor
   */
   void batchRemoveEdges(uintE u,sequence<uintE> edges) {
-    pbbs::sequence<uintE> ds = pbbs::filter(edges,[&](uintE i){return existEdge(u,i);});
-    uintE sumW = ds.size();
+    pbbs::sequence<uintE> filteredEdges = pbbs::filter(edges,[&](uintE i){return existEdge(u,i);});
 
-    this -> m -= sumW;
+    this -> m -= filteredEdges.size();
 
-    v_data.A[u].degree -= ds.size();
+    v_data.A[u].degree -= filteredEdges.size();
 
-    par_for(0,ds.size(),1,[&](size_t i) {
-      uintE v = ds[i];
+    par_for(0,filteredEdges.size(),1,[&](size_t i) {
+      uintE v = filteredEdges[i];
 
       // Remove u from v
       v_data.A[v].degree--;
@@ -367,15 +360,14 @@ struct dynamic_symmetric_graph {
   * @param edges The sequence of edges that need to be removed
   */
   void batchRemoveEdges(sequence<std::pair<uintE,uintE>> edges) {
-    sequence<std::pair<uintE,uintE>> ds = filter(edges,[&](std::pair<uintE,uintE> i){return existEdge(i.first,i.second);});
-    uintE sumW = ds.size();
+    sequence<std::pair<uintE,uintE>> filteredEdges = filter(edges,[&](std::pair<uintE,uintE> i){return existEdge(i.first,i.second);});
 
-    this -> m -= sumW;
-    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * ds.size(),[&](size_t i) {
+    this -> m -= filteredEdges.size();
+    sequence<std::pair<uintE,uintE>> allS = sequence<std::pair<uintE,uintE>>(2 * filteredEdges.size(),[&](size_t i) {
       if(i % 2) {
-        return std::make_pair(ds[i / 2].first,ds[i / 2].second);
+        return std::make_pair(filteredEdges[i / 2].first,filteredEdges[i / 2].second);
       }else{
-        return std::make_pair(ds[i / 2].second,ds[i / 2].first);
+        return std::make_pair(filteredEdges[i / 2].second,filteredEdges[i / 2].first);
       }
     });
 
@@ -393,7 +385,7 @@ struct dynamic_symmetric_graph {
         }
       }
     });
-    if(all.size() > 0) v_data.A[all[2 * ds.size() - 1].first].degree -= 2 * ds.size();
+    if(all.size() > 0) v_data.A[all[2 * filteredEdges.size() - 1].first].degree -= 2 * filteredEdges.size();
     if(all.size() > 0) adjustNeighbors(all[0].first);
 
     par_for(0,all.size(),[&](size_t i) {
