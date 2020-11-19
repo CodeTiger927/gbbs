@@ -44,6 +44,14 @@ class HSet {
     virtual pbbs::sequence<uintE> getH() = 0;
 
     /**
+     * Returns a sequence with all of the vertices in P
+     * Vertices greater than 2h
+     *
+     * @return sequence of all the vertices in P
+     */
+    virtual pbbs::sequence<uintE> getP() = 0;
+
+    /**
      * Returns a boolean that determines if a vertex belongs to H or not
      *
      * @param target, the vertex in question
@@ -83,7 +91,8 @@ class HSet {
      *      Edges can contain new vertices (will be added automatically)
      * @return the h-index after adding all the edges
      */
-    virtual uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
+    virtual uintE insertEdges(pbbs::sequence<std::pair<uintE, uintE>> edges)
+      = 0;
 
     /**
      * Given a batch edges, deletes all of the new edges in parallel
@@ -96,7 +105,8 @@ class HSet {
      *      Can contain edges that don't exist (will be ignored)
      * @return the h-index after deleting all the edges
      */
-    virtual uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges) = 0;
+    virtual uintE eraseEdges(pbbs::sequence<std::pair<uintE, uintE>> edges)
+      = 0;
 
     /**
      * Frees all data structures used in HSet

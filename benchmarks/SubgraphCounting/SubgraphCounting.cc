@@ -1,5 +1,5 @@
 #include "hindex_dyn_arr.h"
-#include "hindex_threshold.h"
+//#include "hindex_threshold.h"
 #include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
@@ -86,11 +86,11 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetDynArr(&_dynG);
     std::cout << "DYN_ARR VERSION\n" << std::endl;
   }
-  else if (type == 1) {
-    h = new HSetThreshold(&_dynG, GA.n);
+  //else if (type == 1) {
+    //h = new HSetThreshold(&_dynG, GA.n);
 
-    std::cout << "THRESHOLD VERSION\n" << std::endl;
-  }
+    //std::cout << "THRESHOLD VERSION\n" << std::endl;
+  //}
 
   TriangleCounting triangle = TriangleCounting(h);
   // Temporary for testing purposes. Initialize this to max node.
