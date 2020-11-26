@@ -1,5 +1,6 @@
 #pragma once
 
+#include "pbbslib/get_time.h"
 #include "pbbslib/random.h"
 #include "ligra/bridge.h"
 #include "ligra/macros.h"
@@ -14,7 +15,14 @@ auto generate_updates(
   for (size_t i=0; i<edges_per_node; i++) {
     edges[i] = std::make_pair(i, i+1);
   }
-  pbbs::random rnd;
+
+
+  timeval now;
+  struct timezone tzp;
+  gettimeofday(&now, &tzp); //Function might be expensive
+
+  pbbs::random rnd = pbbs::random(now.tv_usec);
+
   parallel_for(1, n, [&] (size_t i) {
     auto i_rnd = rnd.fork(i);
     size_t mod_by = 2*i*edges_per_node;
