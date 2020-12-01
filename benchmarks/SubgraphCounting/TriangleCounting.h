@@ -685,22 +685,20 @@ public:
   * @param edges The sequence of edges that need to be added
   */
   void addEdges(sequence<edgeType> edges) {
-    edges = pbbs::filter(edges, [&] (edgeType e) { 
-      return !hset -> G -> existEdge(e.first, e.second); } );
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset
+     -> G -> existEdge(e.first, e.second); } );
 
     // STEP 1 - Adjust the H Set
 
-    // AllEdges in the form of a sparse table, allowing O(1) lookup if an edge 
-    // exists.
-    auto allEdges = make_sparse_table<edgeType,bool,hash_pair>(
-      2 * edges.size(),
-      std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),
-      hash_pair());
-
+    // AllEdges in the form of a sparse table, allowing O(1)
+    // lookup if an edge exists.
+    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>(
+      2 * edges.size() + 1,std::make_tuple(
+        std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
     par_for(0,edges.size(),[&](size_t i) {
       allEdges.insert(std::make_tuple(edges[i],true));
-      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,
-        edges[i].first),true));
+      allEdges.insert(std::make_tuple(
+        std::make_pair(edges[i].second,edges[i].first),true));
     });
 
     // The original HSet elements
@@ -711,13 +709,10 @@ public:
     // The new HSet elements
     sequence<uintE> hs = hset -> getH();
 
-    // The original HSet elements in a sparse table, allowing O(1) lookup if an
-    // element was originally in the hset.
-
+    // The original HSet elements in a sparse table, allowing O(1) lookup
+    // if an element was originally in the hset.
     auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(
-      originalH.size() + 1,
-      std::make_tuple(UINT_E_MAX,false),
-      hash_uintE());
+      originalH.size() * 2 + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
 
     par_for(0,originalH.size(),[&](size_t i) {
       originalHSet.insert(std::make_tuple(originalH[i],true));
@@ -726,9 +721,21 @@ public:
     // Adjusts the wedges now that we have updated the HSet
     adjustHSetWedges(originalH,hs,allEdges,originalHSet);
 
-    // newly formed wedges
-    pbbslib::dyn_arr<pbbslib::dyn_arr<edgeType>> newWedges = 
-    pbbslib::dyn_arr<pbbslib::dyn_arr<edgeType>>(2 * edges.size());
+    // triangles added by wedges
+    pbbslib::dyn_arr<uintE> wedgeTriangles = 
+    pbbslib::dyn_arr<uintE>(edges.size());
+    // triangles added not by h-set but by multiple added edges
+    pbbslib::dyn_arr<uintE> multiTriangles = 
+    pbbslib::dyn_arr<uintE>(edges.size());
+
+    par_for(0,edges.size(),[&](size_t i) {
+      wedgeTriangles.A[i] = 0;
+      multiTriangles.A[i] = 0;
+    });
+
+    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>> newWedges = 
+    pbbslib::dyn_arr<pbbslib::dyn_arr<std::pair<uintE,uintE>>>(
+      2 * edges.size());
 
     // STEP 2 - Find all the triangles/wedges by either wedges or entities 
     // formed solely by the newly added edges
@@ -1061,23 +1068,31 @@ public:
   */
   void removeEdges(sequence<edgeType> edges) {
 
-    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return hset 
-      -> G -> existEdge(e.first, e.second); } );
+    edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) {
+      return hset -> G -> existEdge(e.first, e.second); } );
 
-    if(edges.size() == 0) return;
-
-    auto allEdges = make_sparse_table<edgeType,bool,hash_pair>(
-      2 * edges.size(),
-      std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),false),
-      hash_pair());
-
+    auto allEdges = make_sparse_table<std::pair<uintE,uintE>,bool,hash_pair>
+        (2 * edges.size() + 1,std::make_tuple(
+          std::make_pair(UINT_E_MAX,UINT_E_MAX),false),hash_pair());
     par_for(0,edges.size(),[&](size_t i) {
       allEdges.insert(std::make_tuple(edges[i],true));
-      allEdges.insert(std::make_tuple(std::make_pair(edges[i].second,
-        edges[i].first),true));
+      allEdges.insert(std::make_tuple(
+        std::make_pair(edges[i].second,edges[i].first),true));
     });
 
     sequence<uintE> originalH = hset -> getH();
+
+    // triangles removed by wedges
+    pbbslib::dyn_arr<uintE> wedgeTriangles = 
+    pbbslib::dyn_arr<uintE>(edges.size());
+    // triangles removed not by h-set
+    pbbslib::dyn_arr<uintE> multiTriangles = 
+    pbbslib::dyn_arr<uintE>(edges.size());
+
+    par_for(0,edges.size(),[&](size_t i) {
+      wedgeTriangles.A[i] = 0;
+      multiTriangles.A[i] = 0;
+    });
 
     // wedges that need to be removed
     pbbslib::dyn_arr<pbbslib::dyn_arr<edgeType>> removedWedges = 
