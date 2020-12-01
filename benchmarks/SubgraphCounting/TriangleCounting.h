@@ -392,6 +392,95 @@ public:
     nodes.clear();
   }
 
+  void addEdgesStep2Utility(
+    uintE u,
+    uintE v,
+    sparse_table<edgeType,bool,hash_pair>& allEdges,
+    pbbslib::dyn_arr<pbbslib::dyn_arr<edgeType>>& newWedges,
+    pbbslib::dyn_arr<uintE>& multiTriangles,
+    bool UorV,
+    size_t i) {
+    auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
+
+    pbbslib::dyn_arr<uintE> multiTrianglesV = 
+    pbbslib::dyn_arr<uintE>(edgesV.size());
+
+    pbbslib::dyn_arr<edgeType> newWedgesV = 
+    pbbslib::dyn_arr<edgeType>(2 * edgesV.size());
+
+    par_for(0,edgesV.size(),[&](size_t i) {
+      multiTrianglesV.A[i] = 0;
+      uintE next = std::get<0>(edgesV[i]);
+      if(next == u || !std::get<1>(edgesV[i])) {
+        newWedgesV.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
+        newWedgesV.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
+        return;
+      }
+      if(allEdges.find(std::make_pair(v,next),false)) {
+        // Both are added edges
+
+        newWedgesV.A[2 * i] = std::make_pair(u,next);
+        newWedgesV.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
+      }else{
+        newWedgesV.A[2 * i] = std::make_pair(u,next);
+        newWedgesV.A[2 * i + 1] = std::make_pair(next,u);
+      }
+
+      if(hset -> G -> existEdge(v,next) && 
+        hset -> G -> existEdge(next,u)) {
+        // A triangle!
+        if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(
+          std::make_pair(u,next),false))) {
+          // (u,v) and (v,next) are added edges but not (next,u).
+          // Possible cases are 2 and 3
+          if(!hset -> contains(u) && !hset -> contains(v) && !hset
+            -> contains(next)) {
+            // Case 2, 2 added edges and no h-set
+            multiTrianglesV.A[i] = 3;
+          }else if(hset -> contains(v) && !hset -> contains(u) && !hset 
+            -> contains(next)){
+            // Case 3, 2 added edges and joint node is in h-set
+            multiTrianglesV.A[i] = 6;
+          }
+        }else if(allEdges.find(std::make_pair(u,next),false) && 
+          !(allEdges.find(std::make_pair(v,next),false))) {
+          // (u,v) and (u,next) are added edges but not (v,next).
+          // same with above
+          if(!hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)) {
+            // Case 2, 2 added edges and no h-set
+            multiTrianglesV.A[i] = 3;
+          }else if(hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)){
+            // Case 3, 2 added edges and joint node is in h-set
+            multiTrianglesV.A[i] = 6;
+          }
+        }else if(allEdges.find(std::make_pair(u,next),false) && 
+          allEdges.find(std::make_pair(v,next),false)) {
+          if(!hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)) {
+            // Case 8, 3 added edges and no nodes in h-set
+            multiTrianglesV.A[i] = 2;
+          }
+        }
+      }
+    });
+    newWedgesV.size = newWedgesV.capacity;
+
+    newWedges.A[2 * i + UorV] = seq2da(filter(newWedgesV.to_seq(),
+      [&](edgeType cur) {
+      if((cur.first) == UINT_E_MAX && 
+        (cur.second) == UINT_E_MAX) return false;
+      return true;
+    }));
+    multiTrianglesV.size = multiTrianglesV.capacity;
+    multiTriangles.A[i] += pbbs::reduce(multiTrianglesV.to_seq(),
+      pbbs::addm<uintE>());
+
+    multiTrianglesV.del();
+    newWedgesV.del();
+  }
+
   /**
   * Step 2 of the addEdges process: It finds all the triangles that are formed
   * without the HSet nodes.
@@ -430,171 +519,11 @@ public:
       wedgeTriangles.A[i] = wedges.find(std::make_pair(v,u),0);
 
       if(!hset -> contains(v)) {
-        auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
-
-        pbbslib::dyn_arr<uintE> multiTrianglesV = 
-        pbbslib::dyn_arr<uintE>(edgesV.size());
-
-        pbbslib::dyn_arr<edgeType> newWedgesV = 
-        pbbslib::dyn_arr<edgeType>(2 * edgesV.size());
-
-        par_for(0,edgesV.size(),[&](size_t i) {
-          multiTrianglesV.A[i] = 0;
-          uintE next = std::get<0>(edgesV[i]);
-          if(next == u || !std::get<1>(edgesV[i])) {
-            newWedgesV.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            newWedgesV.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            return;
-          }
-          if(allEdges.find(std::make_pair(v,next),false)) {
-            // Both are added edges
-
-            newWedgesV.A[2 * i] = std::make_pair(u,next);
-            newWedgesV.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-          }else{
-            newWedgesV.A[2 * i] = std::make_pair(u,next);
-            newWedgesV.A[2 * i + 1] = std::make_pair(next,u);
-          }
-
-          if(hset -> G -> existEdge(v,next) && 
-            hset -> G -> existEdge(next,u)) {
-            // A triangle!
-            if(allEdges.find(std::make_pair(v,next),false) && !(allEdges.find(
-              std::make_pair(u,next),false))) {
-              // (u,v) and (v,next) are added edges but not (next,u).
-              // Possible cases are 2 and 3
-              if(!hset -> contains(u) && !hset -> contains(v) && !hset
-                -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesV.A[i] = 3;
-              }else if(hset -> contains(v) && !hset -> contains(u) && !hset 
-                -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesV.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              !(allEdges.find(std::make_pair(v,next),false))) {
-              // (u,v) and (u,next) are added edges but not (v,next).
-              // same with above
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesV.A[i] = 3;
-              }else if(hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesV.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 8, 3 added edges and no nodes in h-set
-                multiTrianglesV.A[i] = 2;
-              }
-            }
-          }
-        });
-        newWedgesV.size = newWedgesV.capacity;
-
-        newWedges.A[2 * i] = seq2da(filter(newWedgesV.to_seq(),
-          [&](edgeType cur) {
-          if((cur.first) == UINT_E_MAX && 
-            (cur.second) == UINT_E_MAX) return false;
-          return true;
-        }));
-        multiTrianglesV.size = multiTrianglesV.capacity;
-        multiTriangles.A[i] = pbbs::reduce(multiTrianglesV.to_seq(),
-          pbbs::addm<uintE>());
-
-        multiTrianglesV.del();
-        newWedgesV.del();
+        addEdgesStep2Utility(u,v,allEdges,newWedges,multiTriangles,false,i);
       }
 
       if(!hset -> contains(u)) {
-        auto edgesU = hset -> G -> v_data.A[u].neighbors.entries();
-
-
-        pbbslib::dyn_arr<uintE> multiTrianglesU = 
-        pbbslib::dyn_arr<uintE>(edgesU.size());
-
-        // newly formed wedges (one existing, one added)
-        pbbslib::dyn_arr<edgeType> newWedgesU = 
-        pbbslib::dyn_arr<edgeType>(2 * edgesU.size());
-
-        par_for(0,edgesU.size(),[&](size_t i) {
-          multiTrianglesU.A[i] = 0;
-          uintE next = std::get<0>(edgesU[i]);
-          if(next == v || !std::get<1>(edgesU[i])) {
-
-            newWedgesU.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            newWedgesU.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            return;
-          }
-          if(allEdges.find(std::make_pair(u,next),false)) {
-            // Both are added edges
-            newWedgesU.A[2 * i] = std::make_pair(v,next);
-            newWedgesU.A[2 * i + 1] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-          }else{
-            newWedgesU.A[2 * i] = std::make_pair(v,next);
-            newWedgesU.A[2 * i + 1] = std::make_pair(next,v);
-          }
-
-          if(hset -> G -> existEdge(next,u) && 
-            hset -> G -> existEdge(next,v)) {
-            // A triangle!
-            if(allEdges.find(std::make_pair(v,next),false) && 
-              !(allEdges.find(std::make_pair(u,next),false))) {
-              // (u,v) and (v,next) are added edges but not (next,u).
-              // Possible cases are 2 and 3
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesU.A[i] = 3;
-              }else if(hset -> contains(v) && !hset -> contains(u) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesU.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              !(allEdges.find(std::make_pair(v,next),false))) {
-              // (u,v) and (u,next) are added edges but not (v,next)/
-              // same with above
-
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesU.A[i] = 3;
-              }else if(hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesU.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 8, 3 added edges and no nodes in h-set
-                multiTrianglesU.A[i] = 2;
-              }
-            }
-          }
-        });
-
-        newWedgesU.size = newWedgesU.capacity;
-
-        newWedges.A[2 * i + 1] = seq2da(filter(newWedgesU.to_seq(),
-          [&](edgeType cur) {
-          if((cur.first) == UINT_E_MAX && 
-            (cur.second) == UINT_E_MAX) return false;
-          return true;
-        }));
-        multiTrianglesU.size = multiTrianglesU.capacity;
-        multiTriangles.A[i] += pbbs::reduce(multiTrianglesU.to_seq(),
-          pbbs::addm<uintE>());
-
-        multiTrianglesU.del();
-        newWedgesU.del();
+        addEdgesStep2Utility(v,u,allEdges,newWedges,multiTriangles,true,i);
       }
     });
 
@@ -768,6 +697,91 @@ public:
     originalHSet.del();
   }
 
+  void removeEdgesStep1Utility(
+    uintE u,
+    uintE v,
+    sparse_table<edgeType,bool,hash_pair>& allEdges,
+    pbbslib::dyn_arr<pbbslib::dyn_arr<edgeType>>& removedWedges,
+    pbbslib::dyn_arr<uintE>& multiTriangles,
+    bool UorV,
+    size_t i) {
+    auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
+
+    pbbslib::dyn_arr<uintE> multiTrianglesV = 
+    pbbslib::dyn_arr<uintE>(edgesV.size());
+
+    pbbslib::dyn_arr<edgeType> removedWedgesV = 
+    pbbslib::dyn_arr<edgeType>(2 * edgesV.size());
+    par_for(0,edgesV.size(),[&](size_t i) {
+      multiTrianglesV.A[i] = 0;
+      uintE next = std::get<0>(edgesV[i]);
+      if(next == u || !std::get<1>(edgesV[i])) {
+        removedWedgesV.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
+        removedWedgesV.A[2 * i + 1] = 
+        std::make_pair(UINT_E_MAX,UINT_E_MAX);
+        return;
+      }
+      if(allEdges.find(std::make_pair(v,next),false)) {
+        // Both are removed edges
+        removedWedgesV.A[2 * i] = std::make_pair(u,next);
+        removedWedgesV.A[2 * i + 1] = 
+        std::make_pair(UINT_E_MAX,UINT_E_MAX);
+      }else{
+        removedWedgesV.A[2 * i] = std::make_pair(u,next);
+        removedWedgesV.A[2 * i + 1] = std::make_pair(next,u);
+      }
+      if(hset -> G -> existEdge(v,next) && 
+        hset -> G -> existEdge(next,u)) {
+        // A triangle!
+        if(allEdges.find(std::make_pair(v,next),false) && 
+          !(allEdges.find(std::make_pair(u,next),false))) {
+          // (u,v) and (v,next) are added edges but not (next,u).
+          // Possible cases are 2 and 3
+          if(!hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)) {
+            // Case 2, 2 added edges and no h-set
+            multiTrianglesV.A[i] = 3;
+          }else if(hset -> contains(v) && !hset -> contains(u) && 
+            !hset -> contains(next)){
+            // Case 3, 2 added edges and joint node is in h-set
+            multiTrianglesV.A[i] = 6;
+          }
+        }else if(allEdges.find(std::make_pair(u,next),false) && 
+          !(allEdges.find(std::make_pair(v,next),false))) {
+          // (u,v) and (u,next) are added edges but not (v,next).
+          // same with above
+          if(!hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)) {
+            // Case 2, 2 added edges and no h-set
+            multiTrianglesV.A[i] = 3;
+          }else if(hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)){
+            // Case 3, 2 added edges and joint node is in h-set
+            multiTrianglesV.A[i] = 6;
+          }
+        }else if(allEdges.find(std::make_pair(u,next),false) && 
+          allEdges.find(std::make_pair(v,next),false)) {
+          if(!hset -> contains(u) && !hset -> contains(v) && 
+            !hset -> contains(next)) {
+            // Case 8, 3 added edges and no nodes in h-set
+            multiTrianglesV.A[i] = 4;
+          }
+        }
+      }
+    });
+    removedWedgesV.size = removedWedgesV.capacity;
+    removedWedges.A[2 * i + UorV] = seq2da(filter(removedWedgesV.to_seq(),
+      [&](edgeType cur) {
+      if((cur.first) == UINT_E_MAX && 
+        (cur.second) == UINT_E_MAX) return false;
+      return true;
+    }));
+    multiTrianglesV.size = multiTrianglesV.capacity;
+    multiTriangles.A[i] += pbbs::reduce(multiTrianglesV.to_seq(),
+    pbbs::addm<uintE>());
+    multiTrianglesV.del();
+    removedWedgesV.del();
+  }
 
   /**
   * Step 1 of the removeEdges process: It finds all the triangles that should
@@ -808,171 +822,11 @@ public:
       wedgeTriangles.A[i] = wedges.find(std::make_pair(v,u), 0);
 
       if(!hset -> contains(v)) {
-        auto edgesV = hset -> G -> v_data.A[v].neighbors.entries();
-
-        pbbslib::dyn_arr<uintE> multiTrianglesV = 
-        pbbslib::dyn_arr<uintE>(edgesV.size());
-
-        pbbslib::dyn_arr<edgeType> removedWedgesV = 
-        pbbslib::dyn_arr<edgeType>(2 * edgesV.size());
-        par_for(0,edgesV.size(),[&](size_t i) {
-          multiTrianglesV.A[i] = 0;
-          uintE next = std::get<0>(edgesV[i]);
-          if(next == u || !std::get<1>(edgesV[i])) {
-            removedWedgesV.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            removedWedgesV.A[2 * i + 1] = 
-            std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            return;
-          }
-          if(allEdges.find(std::make_pair(v,next),false)) {
-            // Both are removed edges
-            removedWedgesV.A[2 * i] = std::make_pair(u,next);
-            removedWedgesV.A[2 * i + 1] = 
-            std::make_pair(UINT_E_MAX,UINT_E_MAX);
-          }else{
-            removedWedgesV.A[2 * i] = std::make_pair(u,next);
-            removedWedgesV.A[2 * i + 1] = std::make_pair(next,u);
-          }
-
-          if(hset -> G -> existEdge(v,next) && 
-            hset -> G -> existEdge(next,u)) {
-            // A triangle!
-            if(allEdges.find(std::make_pair(v,next),false) && 
-              !(allEdges.find(std::make_pair(u,next),false))) {
-              // (u,v) and (v,next) are added edges but not (next,u).
-              // Possible cases are 2 and 3
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesV.A[i] = 3;
-              }else if(hset -> contains(v) && !hset -> contains(u) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesV.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              !(allEdges.find(std::make_pair(v,next),false))) {
-              // (u,v) and (u,next) are added edges but not (v,next).
-              // same with above
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesV.A[i] = 3;
-              }else if(hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesV.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 8, 3 added edges and no nodes in h-set
-                multiTrianglesV.A[i] = 4;
-              }
-            }
-          }
-        });
-        removedWedgesV.size = removedWedgesV.capacity;
-
-        removedWedges.A[2 * i] = seq2da(filter(removedWedgesV.to_seq(),
-          [&](edgeType cur) {
-          if((cur.first) == UINT_E_MAX && 
-            (cur.second) == UINT_E_MAX) return false;
-          return true;
-        }));
-        multiTrianglesV.size = multiTrianglesV.capacity;
-        multiTriangles.A[i] = pbbs::reduce(multiTrianglesV.to_seq(),
-          pbbs::addm<uintE>());
-
-        multiTrianglesV.del();
-        removedWedgesV.del();
+        removeEdgesStep1Utility(u,v,allEdges,removedWedges,multiTriangles,false,i);
       }
 
       if(!hset -> contains(u)) {
-        auto edgesU = hset -> G -> v_data.A[u].neighbors.entries();
-
-
-        pbbslib::dyn_arr<uintE> multiTrianglesU = 
-        pbbslib::dyn_arr<uintE>(edgesU.size());
-
-        // newly formed wedges (one existing, one added)
-        pbbslib::dyn_arr<edgeType> removedWedgesU = 
-        pbbslib::dyn_arr<edgeType>(2 * edgesU.size());
-
-        par_for(0,edgesU.size(),[&](size_t i) {
-          multiTrianglesU.A[i] = 0;
-          uintE next = std::get<0>(edgesU[i]);
-          if(next == v || !std::get<1>(edgesU[i])) {
-            removedWedgesU.A[2 * i] = std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            removedWedgesU.A[2 * i + 1] = 
-            std::make_pair(UINT_E_MAX,UINT_E_MAX);
-            return;
-          }
-          if(allEdges.find(std::make_pair(u,next),false)) {
-            // Both are added edges
-            removedWedgesU.A[2 * i] = std::make_pair(v,next);
-            removedWedgesU.A[2 * i + 1] = 
-            std::make_pair(UINT_E_MAX,UINT_E_MAX);
-          }else{
-            removedWedgesU.A[2 * i] = std::make_pair(v,next);
-            removedWedgesU.A[2 * i + 1] = std::make_pair(next,v);
-          }
-
-          if(hset -> G -> existEdge(v,next) && 
-            hset -> G -> existEdge(next,u)) {
-            // A triangle!
-            if(allEdges.find(std::make_pair(v,next),false) && 
-              !(allEdges.find(std::make_pair(u,next),false))) {
-              // (u,v) and (v,next) are added edges but not (next,u).
-              // Possible cases are 2 and 3
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesU.A[i] = 3;
-              }else if(hset -> contains(v) && !hset -> contains(u) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesU.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              !(allEdges.find(std::make_pair(v,next),false))) {
-              // (u,v) and (u,next) are added edges but not (v,next).
-              // same with above
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 2, 2 added edges and no h-set
-                multiTrianglesU.A[i] = 3;
-              }else if(hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)){
-                // Case 3, 2 added edges and joint node is in h-set
-                multiTrianglesU.A[i] = 6;
-              }
-            }else if(allEdges.find(std::make_pair(u,next),false) && 
-              allEdges.find(std::make_pair(v,next),false)) {
-              if(!hset -> contains(u) && !hset -> contains(v) && 
-                !hset -> contains(next)) {
-                // Case 8, 3 added edges and no nodes in h-set
-                multiTrianglesU.A[i] = 4;
-              }
-            }
-          }
-        });
-
-        removedWedgesU.size = removedWedgesU.capacity;
-
-        removedWedges.A[2 * i + 1] = seq2da(filter(removedWedgesU.to_seq(),
-          [&](edgeType cur) {
-          if((cur.first) == UINT_E_MAX && 
-            (cur.second) == UINT_E_MAX) return false;
-          return true;
-        }));
-        multiTrianglesU.size = multiTrianglesU.capacity;
-        multiTriangles.A[i] += pbbs::reduce(multiTrianglesU.to_seq(),
-          pbbs::addm<uintE>());
-
-        multiTrianglesU.del();
-        removedWedgesU.del();
+        removeEdgesStep1Utility(v,u,allEdges,removedWedges,multiTriangles,true,i);
       }
     });
     
