@@ -383,7 +383,7 @@ public:
   /**
   * Initializes as a graph of n vertices(or with id of at most n - 1).
   *
-  * @param n the expected max id of the vertices in the grpah.
+  * @param n the expected max id of the vertices in the graph.
   */
   void initialize(size_t n) {
     resizeWedges(n * hset -> hindex);
@@ -392,6 +392,21 @@ public:
     nodes.clear();
   }
 
+  /**
+  * A utility function to further modularize the second stage of adding
+  * edges.
+  * This function should only be used inside the addEdgesStep2 function
+  *
+  * @param u the main endpoint
+  * @param v the second endpoint in the edge
+  * @param allEdges a sparse table storing all the added edges, allowing O(1)
+  * lookup
+  * @param newWedges a list where the newly formed wedges will be added to
+  * @param multiTriangles a list of triangles formed by multiple added
+  * edges
+  * @param UorV whether it is the first endpoint or second endpoint in the pair
+  * @param i the i value of the for loop
+  */
   void addEdgesStep2Utility(
     uintE u,
     uintE v,
@@ -697,6 +712,21 @@ public:
     originalHSet.del();
   }
 
+  /**
+  * A utility function to further modularize the first stage of removing
+  * edges.
+  * This function should only be used inside the removeEdgesStep1 function
+  *
+  * @param u the main endpoint
+  * @param v the second endpoint in the edge
+  * @param allEdges a sparse table storing all the removed edges, allowing O(1)
+  * lookup
+  * @param newWedges a list of the wedges will be removed
+  * @param multiTriangles a list of triangles made of multiple removed
+  * edges
+  * @param UorV whether it is the first endpoint or second endpoint in the pair
+  * @param i the i value of the for loop
+  */
   void removeEdgesStep1Utility(
     uintE u,
     uintE v,
@@ -822,11 +852,13 @@ public:
       wedgeTriangles.A[i] = wedges.find(std::make_pair(v,u), 0);
 
       if(!hset -> contains(v)) {
-        removeEdgesStep1Utility(u,v,allEdges,removedWedges,multiTriangles,false,i);
+        removeEdgesStep1Utility(u,v,allEdges,removedWedges,multiTriangles,false
+          ,i);
       }
 
       if(!hset -> contains(u)) {
-        removeEdgesStep1Utility(v,u,allEdges,removedWedges,multiTriangles,true,i);
+        removeEdgesStep1Utility(v,u,allEdges,removedWedges,multiTriangles,true
+          ,i);
       }
     });
     
