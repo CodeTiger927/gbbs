@@ -95,16 +95,19 @@ private:
   HSet* hset;
   sparse_table<edgeType,uintE,hash_pair> wedges;
   uintE stored;
+  bool useP;
 
 public:
   uintE total;
 
-  TriangleCounting(HSet* _hset) {
+  TriangleCounting(HSet* _hset,bool _useP) {
     hset = _hset;
     // Actual number of wedges pair (u,v)
     total = 0;
     // Number of stored wedges pair (u,v). Some might be 0
     stored = 0;
+
+    useP = _useP;
 
     wedges = make_sparse_table<edgeType,uintE,hash_pair>(hset -> G -> n,
       std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),
@@ -115,6 +118,16 @@ public:
 
   void del() {
     wedges.del();
+  }
+
+  /**
+  * Returns either the h set or the P partition depending on the parameters.
+  */
+  sequence<uintE> getHSet() {
+    if(useP) {
+      return hset -> getP();
+    }
+    return hset -> getH();
   }
 
   /**
@@ -153,8 +166,8 @@ public:
   * For debug purposes
   */
   void printH() {
-    for(int i = 0;i < hset -> getH().size();++i) {
-      std::cout << hset -> getH()[i] << " ";
+    for(int i = 0;i < getHSet().size();++i) {
+      std::cout << getHSet()[i] << " ";
     }
     std::cout << endl;
   }
@@ -334,6 +347,9 @@ public:
       if(!(originalHSet.find(hs[i],false))) {
         // Need to remove the wedges
         // I need to find the nodes not in special set first
+        if(hs[i] >= hset -> G -> n) {
+          cout << "what the heck " << hs[i] << endl;
+        }
         auto es = hset -> G -> v_data.A[hs[i]].neighbors.entries();
         sequence<uintE> specialSet = pbbs::filter(sequence<uintE>(es.size(),
           [&](size_t j) {
@@ -646,12 +662,12 @@ public:
     });
 
     // The original HSet elements
-    sequence<uintE> originalH = hset -> getH();
+    sequence<uintE> originalH = getHSet();
 
     hset -> insertEdges(edges);
 
     // The new HSet elements
-    sequence<uintE> hs = hset -> getH();
+    sequence<uintE> hs = getHSet();
 
     // The original HSet elements in a sparse table, allowing O(1) lookup
     // if an element was originally in the hset.
@@ -966,7 +982,7 @@ public:
         std::make_pair(edges[i].second,edges[i].first),true));
     });
 
-    sequence<uintE> originalH = hset -> getH();
+    sequence<uintE> originalH = getHSet();
 
     // triangles removed by wedges
     pbbslib::dyn_arr<uintE> wedgeTriangles = 
@@ -1004,7 +1020,7 @@ public:
 
     hset -> eraseEdges(edges);
 
-    sequence<uintE> hs = hset -> getH();
+    sequence<uintE> hs = getHSet();
 
     auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(
       originalH.size() + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());

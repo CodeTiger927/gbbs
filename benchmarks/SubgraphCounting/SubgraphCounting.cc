@@ -44,13 +44,14 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges(pbbs::sequence<std::pair<uintE,
 // -type 0 for HSetDyn_arr
 // -type 1 for HSetThreshold
 
-//e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 "inputs/graph_test_3.txt"
+//e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 -useP 0 "inputs/graph_test_3.txt"
 
 template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
   long size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
+  bool useP = static_cast<bool>(P.getOptionLongValue("-useP",false));
 
   std::cout << "### Application: Subgraph Counting" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
@@ -92,7 +93,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     //std::cout << "THRESHOLD VERSION\n" << std::endl;
   //}
 
-  TriangleCounting triangle = TriangleCounting(h);
+  TriangleCounting triangle = TriangleCounting(h,useP);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
