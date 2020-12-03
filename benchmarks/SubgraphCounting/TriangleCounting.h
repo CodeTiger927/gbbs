@@ -121,7 +121,8 @@ public:
   }
 
   /**
-  * Returns either the h set or the P partition depending on the parameters.
+  * Returns either the h set or the P partition depending on the variable
+  * useP, which is defined in the constructor.
   */
   sequence<uintE> getHSet() {
     if(useP) {
@@ -347,9 +348,6 @@ public:
       if(!(originalHSet.find(hs[i],false))) {
         // Need to remove the wedges
         // I need to find the nodes not in special set first
-        if(hs[i] >= hset -> G -> n) {
-          cout << "what the heck " << hs[i] << endl;
-        }
         auto es = hset -> G -> v_data.A[hs[i]].neighbors.entries();
         sequence<uintE> specialSet = pbbs::filter(sequence<uintE>(es.size(),
           [&](size_t j) {

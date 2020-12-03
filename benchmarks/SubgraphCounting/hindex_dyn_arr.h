@@ -770,8 +770,11 @@ class HSetDynArr : public HSet {
      * @return sequence of all the vertices in H
      */
     pbbs::sequence<uintE> getP() {
-      //Return empty sequence if h is 0
-      if (this->hindex == 0) {
+
+      cout << hindex << " " << C.size << endl;
+
+      //Return empty sequence if there are no vertices above 2 * h
+      if (this->hindex == 0 || C.size < 2 * hindex) {
         return pbbs::sequence<uintE>(0);
       }
 
@@ -784,22 +787,29 @@ class HSetDynArr : public HSet {
         else prefixSum[i] = 0;
       });
 
+      for (int i = 0; i < prefixSum.size(); i++)  cout << prefixSum[i] << endl;
+
       //Take exclusive prefix sum to find where each block of
-      //  same degree vertices start 
+      //  same degree vertices start
+
+      uintE total = prefixSum[prefixSum.size() - 1];
       pbbslib::scan_add_inplace(prefixSum);
 
-      pbbs::sequence<uintE> pSeq = pbbs::sequence<uintE>(hindex);
-
+      total += prefixSum[prefixSum.size() - 1];
+      pbbs::sequence<uintE> pSeq = pbbs::sequence<uintE>(total); //Should be the last size of prefix sum
+cout << "A" << endl;
       //Add rest of vertices (using the prefix sum to find where they go)
-      par_for(0, prefixSum.size(), [&] (size_t i) {
-        if (C.A[2 * this->hindex + i] != nullptr) {
+      //par_for(0, prefixSum.size(), [&] (size_t i) {
+for (int i = 0; i < prefixSum.size(); i++) {
+        if (2 * hindex + 1 < C.size && C.A[2 * this->hindex + i] != nullptr) {
           uintE offSet = prefixSum[i];
-          par_for(0, C.A[2 * this->hindex]->size, [&] (size_t j) {
+          //par_for(0, C.A[2 * this->hindex + i]->size, [&] (size_t j) {
+for (int j = 0; j < C.A[2 * this->hindex + i]->size; j++) {
             pSeq[j + offSet] = C.A[this->hindex + i]->A[j];
-          });
+          }//);
         }
-      });
-
+      }//);
+cout << "A" << endl;
       return pSeq;
     }
 
