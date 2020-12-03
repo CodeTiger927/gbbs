@@ -641,10 +641,25 @@ public:
   * Step 6 - Clean up memory
   *
   * @param edges The sequence of edges that need to be added
+  * @param debugMode whether or not to show the time taken for each step
   */
-  void addEdges(sequence<edgeType> edges) {
+  void addEdges(sequence<edgeType> edges,bool debugMode = false) {
     edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset
      -> G -> existEdge(e.first, e.second); } );
+
+    timer totalTime;
+    // adjusting wedges
+    timer step1;
+    // non hset triangles
+    timer step2;
+    // hset triangles
+    timer step3;
+    // hset insertion time
+    timer hsetTimeInsert;
+    // hset time spent adding wedges
+    timer addingWedges;
+
+    totalTime.start();
 
     // STEP 1 - Adjust the H Set
 
@@ -661,8 +676,9 @@ public:
 
     // The original HSet elements
     sequence<uintE> originalH = getHSet();
-
+    hsetTimeInsert.start();
     hset -> insertEdges(edges);
+    hsetTimeInsert.stop();
 
     // The new HSet elements
     sequence<uintE> hs = getHSet();
@@ -676,8 +692,10 @@ public:
       originalHSet.insert(std::make_tuple(originalH[i],true));
     });  
 
+    step1.start();
     // Adjusts the wedges now that we have updated the HSet
     adjustHSetWedges(originalH,hs,allEdges,originalHSet);
+    step1.stop();
 
     // triangles added by wedges
     pbbslib::dyn_arr<uintE> wedgeTriangles = 
@@ -697,12 +715,14 @@ public:
 
     // STEP 2 - Find all the triangles/wedges by either wedges or entities 
     // formed solely by the newly added edges
-    
+    step2.start();
     long long step2Total = addEdgesStep2(edges,allEdges,newWedges);
+    step2.stop();
 
     // STEP 3 - Find triangles formed with the H Set
-    
+    step3.start();
     long long step3Total = addEdgesStep3(edges,allEdges,hs);
+    step3.stop();
 
     // STEP 4, update the counts
 
@@ -710,14 +730,34 @@ public:
 
     total += step3Total;
 
-    // STEP 5: Add in edges
+    // STEP 5: Add in wedges
 
     newWedges.size = newWedges.capacity;
     sequence<edgeType> allNewWedges = merge_sort(concatDynArr(newWedges)
       .to_seq(),[&](edgeType a,edgeType b) {return a > b;});
+    addingWedges.start();
     addWedges(allNewWedges);
+    addingWedges.stop();
 
-    // STEP 6: Clean ups
+    // STEP 6: Clean ups and summary
+
+    totalTime.stop();
+
+    if(debugMode) {
+      cout << "------------------------------------------------" << endl;
+      cout << "Inserting " << edges.size() << " edges" << endl; 
+      cout << "HIndex: " << originalH.size() << " to " << hs.size() << endl;
+      cout << "Triangle Count: " << total << endl;
+      cout << "Total time: " << totalTime.get_total() << endl;
+      cout << "Step1: " << step1.get_total() << endl; 
+      cout << "Step2: " << step2.get_total() << endl; 
+      cout << "Step3: " << step3.get_total() << endl; 
+      cout << "HSet Insertion Time: " << hsetTimeInsert.get_total() << endl;
+      cout << "Adding " << allNewWedges.size() << " Wedges Time: ";
+      cout << addingWedges.get_total() << endl;
+      cout << "------------------------------------------------" << endl;
+    }
+    edges.clear();
     newWedges.del();
     allNewWedges.clear();
     allEdges.del();

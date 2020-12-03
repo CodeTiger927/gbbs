@@ -61,7 +61,8 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges
 // -useP 0 for not using P partition
 // -useP 1 for using P partition
 
-//e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 -useP 0 "inputs/graph_test_3.txt"
+//e.g.: ./SubgraphCounting -s -rounds 1 -type 0 -size 10 
+// -useP 0 "inputs/graph_test_3.txt"
 
 template <class Graph>
 double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
@@ -69,11 +70,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   long type = static_cast<uintE>(P.getOptionLongValue("-type", 0));
   long size = static_cast<uintE>(P.getOptionLongValue("-size", 10));
   bool useP = static_cast<bool>(P.getOptionLongValue("-useP",false));
-  
+
+  //Barabasi_albert coefficient for scaling down the dataset.
+  double baCoe = 0.5;
   //Barabasi_albert parameter - nodes
   uintE nodes = static_cast<uintE>(P.getOptionLongValue("-nodes", GA.n));
   //Barabasi_albert parameter - edges
-  uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", GA.m / GA.n));
+  uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", baCoe * GA.m / GA.n));
 
   std::cout << "### Application: Subgraph Counting" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
@@ -146,9 +149,9 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   // Add all edges from static graph
   staticTime.start();
-  triangle.addEdges(insertBatch);
+  triangle.addEdges(insertBatch,true);
   staticTime.stop();
-  std::cout << "P SET SIZE: " << h->getP().size() << endl;
+  // std::cout << "P SET SIZE: " << h->getP().size() << endl;
   std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
 
   insertionTotal.start();
@@ -158,19 +161,19 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     cout << "Batch " << (i + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges)
+      barabasi_albert::generate_updates(nodes,edges)
     );
 
     triangleTime.start();
     insertion.start();
-    triangle.addEdges(batch);
+    triangle.addEdges(batch,true);
     insertion.stop();
     triangleTime.stop();
     batch.clear();
     // cout << "Triangles: " << triangle.total << endl;
   }
   insertionTotal.stop();
-  std::cout << "P SET SIZE: " << h->getP().size() << endl;
+  // std::cout << "P SET SIZE: " << h->getP().size() << endl;
   cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
@@ -180,7 +183,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges)
+      barabasi_albert::generate_updates(nodes,edges)
     );
 
     triangleTime.start();
@@ -199,7 +202,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
   cout << "Actual Deletion Time: " << insertion.get_total() << endl;
   cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
-  cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
+  cout << "Actual Batch Counting Time: " << triangleTime.get_total() << endl;
   cout << "Total Time: " << totalTime.get_total() << endl;
 
   h->del();
