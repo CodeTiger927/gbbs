@@ -144,14 +144,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   staticTime.start();
   triangle.addEdges(insertBatch);
   staticTime.stop();
-  std::cout << "P SET SIZE: " << h->getP().size() << endl;
   std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
 
   insertionTotal.start();
 
   //Add random edges
   for (int i = 0; i < size; i++) {
-    cout << "Batch " << (i + 1) << endl;
+    if (i % 10 == 0) cout << "Batch " << (i + 1) << endl;
+    
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
       barabasi_albert::generate_updates(nodes, edges)
@@ -166,14 +166,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     // cout << "Triangles: " << triangle.total << endl;
   }
   insertionTotal.stop();
-  std::cout << "P SET SIZE: " << h->getP().size() << endl;
   cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
   
   //Delete random edges
   for (int i = 0; i < size;i++) {
-    cout << "Batch " << (i + size + 1) << endl;
+    if (i % 10 == 0) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
       barabasi_albert::generate_updates(nodes, edges)
