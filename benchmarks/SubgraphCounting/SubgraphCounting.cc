@@ -122,6 +122,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   par_for(0,GA.n,[&](size_t i) {
     par_for(0,GA.get_vertex(i).degree,[&](size_t j) {
+
       uintE n = GA.get_vertex(i).getOutNeighbor(j);
       if(i > n) {
         insertBatchtmp[sizes[i] + j] = std::make_pair(UINT_E_MAX,UINT_E_MAX);

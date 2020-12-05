@@ -95,16 +95,19 @@ private:
   HSet* hset;
   sparse_table<edgeType,uintE,hash_pair> wedges;
   uintE stored;
+  bool useP;
 
 public:
   uintE total;
 
-  TriangleCounting(HSet* _hset) {
+  TriangleCounting(HSet* _hset,bool _useP) {
     hset = _hset;
     // Actual number of wedges pair (u,v)
     total = 0;
     // Number of stored wedges pair (u,v). Some might be 0
     stored = 0;
+
+    useP = _useP;
 
     wedges = make_sparse_table<edgeType,uintE,hash_pair>(hset -> G -> n,
       std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),
@@ -115,6 +118,17 @@ public:
 
   void del() {
     wedges.del();
+  }
+
+  /**
+  * Returns either the h set or the P partition depending on the variable
+  * useP, which is defined in the constructor.
+  */
+  sequence<uintE> getHSet() {
+    if(useP) {
+      return hset -> getP();
+    }
+    return hset -> getH();
   }
 
   /**
@@ -153,8 +167,8 @@ public:
   * For debug purposes
   */
   void printH() {
-    for(int i = 0;i < hset -> getH().size();++i) {
-      std::cout << hset -> getH()[i] << " ";
+    for(int i = 0;i < getHSet().size();++i) {
+      std::cout << getHSet()[i] << " ";
     }
     std::cout << endl;
   }
@@ -627,10 +641,25 @@ public:
   * Step 6 - Clean up memory
   *
   * @param edges The sequence of edges that need to be added
+  * @param debugMode whether or not to show the time taken for each step
   */
-  void addEdges(sequence<edgeType> edges) {
+  void addEdges(sequence<edgeType> edges,bool debugMode = false) {
     edges = pbbs::filter(edges, [&] (std::pair<uintE, uintE> e) { return !hset
      -> G -> existEdge(e.first, e.second); } );
+
+    timer totalTime;
+    // adjusting wedges
+    timer step1;
+    // non hset triangles
+    timer step2;
+    // hset triangles
+    timer step3;
+    // hset insertion time
+    timer hsetTimeInsert;
+    // hset time spent adding wedges
+    timer addingWedges;
+
+    totalTime.start();
 
     // STEP 1 - Adjust the H Set
 
@@ -646,12 +675,13 @@ public:
     });
 
     // The original HSet elements
-    sequence<uintE> originalH = hset -> getH();
-
+    sequence<uintE> originalH = getHSet();
+    hsetTimeInsert.start();
     hset -> insertEdges(edges);
+    hsetTimeInsert.stop();
 
     // The new HSet elements
-    sequence<uintE> hs = hset -> getH();
+    sequence<uintE> hs = getHSet();
 
     // The original HSet elements in a sparse table, allowing O(1) lookup
     // if an element was originally in the hset.
@@ -662,8 +692,10 @@ public:
       originalHSet.insert(std::make_tuple(originalH[i],true));
     });  
 
+    step1.start();
     // Adjusts the wedges now that we have updated the HSet
     adjustHSetWedges(originalH,hs,allEdges,originalHSet);
+    step1.stop();
 
     // triangles added by wedges
     pbbslib::dyn_arr<uintE> wedgeTriangles = 
@@ -683,12 +715,14 @@ public:
 
     // STEP 2 - Find all the triangles/wedges by either wedges or entities 
     // formed solely by the newly added edges
-    
+    step2.start();
     long long step2Total = addEdgesStep2(edges,allEdges,newWedges);
+    step2.stop();
 
     // STEP 3 - Find triangles formed with the H Set
-    
+    step3.start();
     long long step3Total = addEdgesStep3(edges,allEdges,hs);
+    step3.stop();
 
     // STEP 4, update the counts
 
@@ -696,14 +730,34 @@ public:
 
     total += step3Total;
 
-    // STEP 5: Add in edges
+    // STEP 5: Add in wedges
 
     newWedges.size = newWedges.capacity;
     sequence<edgeType> allNewWedges = merge_sort(concatDynArr(newWedges)
       .to_seq(),[&](edgeType a,edgeType b) {return a > b;});
+    addingWedges.start();
     addWedges(allNewWedges);
+    addingWedges.stop();
 
-    // STEP 6: Clean ups
+    // STEP 6: Clean ups and summary
+
+    totalTime.stop();
+
+    if(debugMode) {
+      cout << "------------------------------------------------" << endl;
+      cout << "Inserting " << edges.size() << " edges" << endl; 
+      cout << "HIndex: " << originalH.size() << " to " << hs.size() << endl;
+      cout << "Triangle Count: " << total << endl;
+      cout << "Total time: " << totalTime.get_total() << endl;
+      cout << "Step1: " << step1.get_total() << endl; 
+      cout << "Step2: " << step2.get_total() << endl; 
+      cout << "Step3: " << step3.get_total() << endl; 
+      cout << "HSet Insertion Time: " << hsetTimeInsert.get_total() << endl;
+      cout << "Adding " << allNewWedges.size() << " Wedges Time: ";
+      cout << addingWedges.get_total() << endl;
+      cout << "------------------------------------------------" << endl;
+    }
+    edges.clear();
     newWedges.del();
     allNewWedges.clear();
     allEdges.del();
@@ -966,7 +1020,7 @@ public:
         std::make_pair(edges[i].second,edges[i].first),true));
     });
 
-    sequence<uintE> originalH = hset -> getH();
+    sequence<uintE> originalH = getHSet();
 
     // triangles removed by wedges
     pbbslib::dyn_arr<uintE> wedgeTriangles = 
@@ -1004,7 +1058,7 @@ public:
 
     hset -> eraseEdges(edges);
 
-    sequence<uintE> hs = hset -> getH();
+    sequence<uintE> hs = getHSet();
 
     auto originalHSet = make_sparse_table<uintE,bool,hash_uintE>(
       originalH.size() + 1,std::make_tuple(UINT_E_MAX,false),hash_uintE());
