@@ -106,7 +106,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     //std::cout << "THRESHOLD VERSION\n" << std::endl;
   //}
 
-  TriangleCounting triangle = TriangleCounting(h);
+  TriangleCounting triangle = TriangleCounting(h, false);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
