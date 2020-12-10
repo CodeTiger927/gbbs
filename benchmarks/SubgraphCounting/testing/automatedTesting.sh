@@ -8,7 +8,7 @@ fname="../inputs/graph_test_DBLP.txt"
 types=(0)
 nodes=500000
 parameter2=(3)
-batchesSize=(10 50 100 200 1000)
+batchesSize=(10 20 50 100 200)
 useP=(0)
 
 for a in ${types[@]}; do
