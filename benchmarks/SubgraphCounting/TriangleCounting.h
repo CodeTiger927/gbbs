@@ -234,8 +234,13 @@ public:
   * @param seq the sequence of pairs of the wedges that need to be removed
   */
   void addWedges(sequence<edgeType> & seq) {
-    resizeWedges(stored + seq.size());
-    stored += seq.size();
+    sequence<uintE> uniqueSeq = sequence<uintE>(seq.size(),
+      [&](size_t i) {return ((i == 0 || seq[i] != seq[i - 1])
+        && wedges.find(seq[i],0) == 0);});
+    uintE uniqueNum = pbbs::reduce(uniqueSeq,pbbs::addm<uintE>());
+    uniqueSeq.clear();
+    resizeWedges(stored + uniqueNum);
+    stored += uniqueNum;
 
     par_for(0,seq.size(),[&](size_t i) {
       if(i != 0) {
@@ -266,6 +271,11 @@ public:
   * @param seq the sequence of pairs of the wedges that need to be removed
   */
   void removeWedges(sequence<edgeType> & seq) {
+    sequence<uintE> uniqueSeq = sequence<uintE>(seq.size(),
+      [&](size_t i) {return (i == 0 || seq[i] != seq[i - 1]);});
+    uintE uniqueNum = pbbs::reduce(uniqueSeq,pbbs::addm<uintE>());
+    uniqueSeq.clear();
+    resizeWedges(stored - uniqueNum);
     par_for(0,seq.size(),[&](size_t i) {
       if(i != 0) {
         if(seq[i] != seq[i - 1]) {
