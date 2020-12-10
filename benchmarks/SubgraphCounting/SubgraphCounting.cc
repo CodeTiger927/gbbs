@@ -70,15 +70,19 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE nodes = static_cast<uintE>(P.getOptionLongValue("-nodes", GA.n));
   //Barabasi_albert parameter - edges
   uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", GA.m / GA.n));
+  // Mode activated for testing to more easily store output
+  bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
-  std::cout << "### Application: Subgraph Counting" << std::endl;
-  std::cout << "### Graph: " << P.getArgument(0) << std::endl;
-  std::cout << "### Threads: " << num_workers() << std::endl;
-  std::cout << "### n: " << GA.n << std::endl;
-  std::cout << "### m: " << GA.m << std::endl;
-  std::cout << "### Params: -type = " << type << " -size = " << size << std::endl;
-  std::cout << "### ------------------------------------" << endl;
 
+  if(!scriptMode) {
+    std::cout << "### Application: Subgraph Counting" << std::endl;
+    std::cout << "### Graph: " << P.getArgument(0) << std::endl;
+    std::cout << "### Threads: " << num_workers() << std::endl;
+    std::cout << "### n: " << GA.n << std::endl;
+    std::cout << "### m: " << GA.m << std::endl;
+    std::cout << "### Params: -type = " << type << " -size = " << size << std::endl;
+    std::cout << "### ------------------------------------" << endl;
+  }
   assert(P.getOption("-s"));
   assert(type < 2); //Valid option (will increase as there are more options)
   
@@ -145,13 +149,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   staticTime.start();
   triangle.addEdges(insertBatch);
   staticTime.stop();
-  std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
-
+  uintE staticHIndex = triangle.getHIndex();
+  uintE staticTriangle = triangle.total;
+  if(!scriptMode) std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
   insertionTotal.start();
 
   //Add random edges
   for (int i = 0; i < size; i++) {
-    if (i % 10 == 0) cout << "Batch " << (i + 1) << endl;
+    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + 1) << endl;
     
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
@@ -167,13 +172,16 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     // cout << "Triangles: " << triangle.total << endl;
   }
   insertionTotal.stop();
-  cout << "Triangles: " << triangle.total << endl;
+  uintE insertionHIndex = triangle.getHIndex();
+  uintE insertionTriangle = triangle.total;
+
+  if(!scriptMode) cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
   
   //Delete random edges
   for (int i = 0; i < size;i++) {
-    if (i % 10 == 0) cout << "Batch " << (i + size + 1) << endl;
+    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
       barabasi_albert::generate_updates(nodes, edges)
@@ -187,16 +195,20 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     batch.clear();
   }
   deletionTotal.stop();
+  uintE deletionHIndex = triangle.getHIndex();
+  uintE deletionTriangle = triangle.total;
   totalTime.stop();
 
-  cout << "Triangles: " << triangle.total << endl;
-  cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
-  cout << "Actual Insertion Time: " << insertion.get_total() << endl;
-  cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
-  cout << "Actual Deletion Time: " << insertion.get_total() << endl;
-  cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
-  cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
-  cout << "Total Time: " << totalTime.get_total() << endl;
+  if(!scriptMode) {
+    cout << "Triangles: " << triangle.total << endl;
+    cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
+    cout << "Actual Insertion Time: " << insertion.get_total() << endl;
+    cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Deletion Time: " << insertion.get_total() << endl;
+    cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
+    cout << "Total Time: " << totalTime.get_total() << endl;
+  }
 
   h->del();
 
@@ -211,6 +223,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   triangle.del();
   
+  if(scriptMode) {
+      cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
+    << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
+    << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
+    << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
+    << endl;
+  }
 
   return 0;
 }

@@ -132,6 +132,13 @@ public:
   }
 
   /**
+  * Returns the current hindex of the graph
+  */
+  uintE getHIndex() {
+    return hset -> hindex;
+  }
+
+  /**
   * Given the expected number of wedges pairs, it would automatically adjust
   * the Wedges map to an apporpriate capacity
   * 
