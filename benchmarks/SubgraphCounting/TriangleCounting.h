@@ -157,7 +157,7 @@ public:
       std::make_tuple(std::make_pair(UINT_E_MAX,UINT_E_MAX),0),
       hash_pair());
 
-    par_for(0, entries.size(),[&](size_t i) { 
+    par_for(0,entries.size(),[&](size_t i) { 
       if(std::get<1>(entries[i])) {
         wedges.insert(entries[i]);
         added[i] = 1;
@@ -772,6 +772,7 @@ public:
       cout << "HSet Insertion Time: " << hsetTimeInsert.get_total() << endl;
       cout << "Adding " << allNewWedges.size() << " Wedges Time: ";
       cout << addingWedges.get_total() << endl;
+      cout << "New Wedges Map size " << wedges.m << endl;
       cout << "------------------------------------------------" << endl;
     }
     edges.clear();

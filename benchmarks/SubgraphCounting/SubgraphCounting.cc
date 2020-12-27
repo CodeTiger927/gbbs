@@ -11,9 +11,35 @@
 #include <assert.h>
 #include <vector>
 
-pbbs::sequence<std::pair<uintE, uintE>> getEdges
-  (pbbs::sequence<std::pair<uintE, uintE>> edges) {
 
+// Map the dense components to spread out throughout the graph
+pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
+  (pbbs::sequence<std::pair<uintE, uintE>> edges,uintE l,uintE h,
+    pbbs::random& rand) {
+  auto sparseEs = make_sparse_table<uintE,uintE,hash_uintE>(2 * edges.size(),
+    std::make_tuple(UINT_E_MAX,UINT_E_MAX),hash_uintE());
+  par_for(0,edges.size(),[&](size_t i) {
+    uintE u = edges[i].first;
+    uintE v = edges[i].second;
+    if(sparseEs.find(u,UINT_E_MAX) == UINT_E_MAX) {
+      sparseEs.insert(std::make_tuple(u,rand[2 * i] % (h - l + 1) + l));
+    }
+    if(sparseEs.find(v,UINT_E_MAX) == UINT_E_MAX) {
+      sparseEs.insert(std::make_tuple(v,rand[2 * i + 1] % (h - l + 1) + l));
+    }
+  });
+  pbbs::sequence<std::pair<uintE, uintE>> res(edges.size(),
+    [&](size_t i) {return std::make_pair(
+      sparseEs.find(edges[i].first,0),sparseEs.find(edges[i].second,0));});
+  sparseEs.del();
+  rand = rand.next();
+  return res;
+}
+
+pbbs::sequence<std::pair<uintE, uintE>> getEdges
+  (pbbs::sequence<std::pair<uintE, uintE>> edges,uintE N) {
+  pbbs::random rand = pbbs::random();
+  edges = sparcifyEdges(edges,0,N - 1,rand);
 
   auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>
     (edges.size(), [&] (size_t i) {
@@ -54,6 +80,7 @@ pbbs::sequence<std::pair<uintE, uintE>> getEdges
  
   return uniqueEdges;
 }
+
 
 // -type 0 for HSetDyn_arr
 // -type 1 for HSetThreshold
@@ -158,9 +185,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   for (int i = 0; i < size; i++) {
     if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + 1) << endl;
     
-    //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges)
+      barabasi_albert::generate_updates(nodes, edges),GA.n
     );
 
     triangleTime.start();
@@ -184,7 +210,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges)
+      barabasi_albert::generate_updates(nodes, edges),GA.n
     );
 
     triangleTime.start();

@@ -6,16 +6,16 @@
 
 fname="../inputs/graph_test_DBLP.txt"
 types=(0)
-nodes=500000
-parameter2=(3)
-batchesSize=(10 20 50 100 200)
+nodes=20000
+parameter2=(5)
+batchesSize=(10 20 50)
 useP=(0)
 
 for a in ${types[@]}; do
 	for b in ${batchesSize[@]}; do
 		for c in ${parameter2[@]}; do
 			for d in ${useP[@]}; do
-				../SubgraphCounting -s -rounds 1 -type $a -size $b -edges $c -useP $d -scriptMode 1 $fname
+				../SubgraphCounting -s -rounds 1 -type $a -size $b -edges $c -nodes $nodes -useP $d -scriptMode 1 $fname
 			done
 		done
 	done
