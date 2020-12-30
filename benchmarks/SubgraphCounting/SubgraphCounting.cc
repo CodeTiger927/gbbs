@@ -1,5 +1,5 @@
 #include "hindex_dyn_arr.h"
-//#include "hindex_threshold.h"
+#include "hindex_threshold.h"
 #include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
@@ -43,6 +43,7 @@ pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
 pbbs::sequence<std::pair<uintE,uintE>> getDeleteEdges(uintE V,uintE N,
   uintE E,pbbs::random& rand,
   dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>& dsg) {
+
   std::vector<std::pair<uintE,uintE>> tmp;
   std::unordered_set<uintE> selectedVertices;
   uintE counter = 0;
@@ -125,6 +126,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE nodes = static_cast<uintE>(P.getOptionLongValue("-nodes", GA.n));
   //Barabasi_albert parameter - edges
   uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", GA.m / GA.n));
+  //Use P optimization
+  bool useP = static_cast<uintE>(P.getOptionLongValue("-useP", false));
   // Mode activated for testing to more easily store output
   bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
@@ -159,11 +162,11 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetDynArr(&_dynG);
     std::cout << "DYN_ARR VERSION\n" << std::endl;
   }
-  //else if (type == 1) { //Temporarily disable threshold (needs work)
-    //h = new HSetThreshold(&_dynG, GA.n);
+  else if (type == 1) {
+    h = new HSetThreshold(&_dynG, GA.n);
 
-    //std::cout << "THRESHOLD VERSION\n" << std::endl;
-  //}
+    std::cout << "THRESHOLD VERSION\n" << std::endl;
+  }
 
   TriangleCounting triangle = TriangleCounting(h, false);
   // Temporary for testing purposes. Initialize this to max node.
@@ -230,6 +233,14 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE insertionHIndex = triangle.getHIndex();
   uintE insertionTriangle = triangle.total;
 
+  pid_t pid = getpid();
+  char statmf[64];
+  sprintf(statmf, "/proc/%d/statm", pid);
+  std::ifstream fin (statmf);
+
+  long sz, rss;
+  fin >> sz >> rss;
+
   if(!scriptMode) cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
@@ -260,6 +271,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
     cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
     cout << "Total Time: " << totalTime.get_total() << endl;
+    cout << "SIZE: " << (((double) sz) / 256) << " KB; RSS: " << (((double) rss) / 256) << " KB" << endl;
   }
 
   h->del();
@@ -280,7 +292,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
     << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
     << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
-    << endl;
+    << (((double) sz) / 256) << ", " << (((double) rss) / 256) << endl;
   }
 
   return 0;
