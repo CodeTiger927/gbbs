@@ -190,7 +190,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   //Add random edges
   for (int i = 0; i < size; i++) {
-    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + 1) << endl;
+    if (!scriptMode) cout << "Batch " << (i + 1) << endl;
     
     auto batch = getEdges(
       barabasi_albert::generate_updates(nodes, edges),GA.n
@@ -211,7 +211,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   pid_t pid = getpid();
   char statmf[64];
   sprintf(statmf, "/proc/%d/statm", pid);
-  cout << "PATH: " << statmf << endl;
   std::ifstream fin (statmf);
 
   long sz, rss;
@@ -223,7 +222,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   
   //Delete random edges
   for (int i = 0; i < size;i++) {
-    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + size + 1) << endl;
+    if (!scriptMode) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
     auto batch = getEdges(
       barabasi_albert::generate_updates(nodes, edges),GA.n
@@ -267,7 +266,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
     cout << "Total Time: " << totalTime.get_total() << endl;
     cout << "Max RSS: " << resource.ru_maxrss << " KB" << endl;
-    cout << (sz * 4096) << " " << (rss * 4096) << endl;
+    cout << "SIZE: " << (((double) sz) / 256) << " KB; RSS: " << (((double) rss) / 256) << " KB" << endl;
   }
   else {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 

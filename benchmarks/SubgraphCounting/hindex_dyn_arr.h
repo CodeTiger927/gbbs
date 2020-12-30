@@ -761,6 +761,8 @@ class HSetDynArr : public HSet {
         }
       });
 
+      prefixSum.clear();
+
       return hSeq;
     }
 
@@ -777,6 +779,7 @@ class HSetDynArr : public HSet {
         return this->G->get_vertex(v).degree >= 2 * hindex;
       };
       auto pSeq = pbbs::filter(hSeq, f);
+      hSeq.clear();
       return pSeq;
     }
 

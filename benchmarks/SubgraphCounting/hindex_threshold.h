@@ -671,7 +671,7 @@ class HSetThreshold : public HSet {
           });
         }
       });
-
+      prefixSum.clear();
       return hSeq;
     }
 
@@ -688,6 +688,7 @@ class HSetThreshold : public HSet {
         return this->G->get_vertex(v).degree >= 2 * hindex;
       };
       auto pSeq = pbbs::filter(hSeq, f);
+      hSeq.clear();
       return pSeq;
     }
 
