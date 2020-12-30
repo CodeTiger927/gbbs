@@ -274,7 +274,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
         << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
         << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
-        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle << endl;
+        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
         << ", " << resource.ru_maxrss << endl;
   }
 
