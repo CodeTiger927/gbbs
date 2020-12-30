@@ -5,17 +5,17 @@
 #If you don't have the results folder, please use the command "mkdir results"
 
 fname="../inputs/graph_test_DBLP.txt"
-types=(0)
+types=(0, 1)
 nodes=20000
 parameter2=(5)
-batchesSize=(10 20 50)
-useP=(0)
+batchesSize=(10, 20, 30, 40, 50)
+useP=(0, 1)
 
 for a in ${types[@]}; do
 	for b in ${batchesSize[@]}; do
 		for c in ${parameter2[@]}; do
 			for d in ${useP[@]}; do
-				../SubgraphCounting -s -rounds 1 -type $a -size $b -edges $c -nodes $nodes -useP $d -scriptMode 1 $fname
+				../SubgraphCounting -s -rounds 3 -type $a -size $b -edges $c -nodes $nodes -P $d -scriptMode 1 $fname
 			done
 		done
 	done
