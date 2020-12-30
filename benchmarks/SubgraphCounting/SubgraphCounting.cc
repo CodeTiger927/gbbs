@@ -106,7 +106,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   // Mode activated for testing to more easily store output
   bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
-  struct rusage resource;
+  //struct rusage resource;
 
   if(!scriptMode) {
     std::cout << "### Application: Subgraph Counting" << std::endl;
@@ -144,7 +144,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
 
-  TriangleCounting triangle = TriangleCounting(h, false);
+  TriangleCounting triangle = TriangleCounting(h, useP);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
@@ -208,6 +208,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE insertionHIndex = triangle.getHIndex();
   uintE insertionTriangle = triangle.total;
 
+  
   pid_t pid = getpid();
   char statmf[64];
   sprintf(statmf, "/proc/%d/statm", pid);
@@ -215,6 +216,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   long sz, rss;
   fin >> sz >> rss;
+  
 
   if(!scriptMode) cout << "Triangles: " << triangle.total << endl;
 
@@ -272,7 +274,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
         << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
         << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
-        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
+        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle << endl;
         << ", " << resource.ru_maxrss << endl;
   }
 
