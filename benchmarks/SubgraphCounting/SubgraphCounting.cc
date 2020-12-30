@@ -13,6 +13,8 @@
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Map the dense components to spread out throughout the graph
 pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
@@ -206,6 +208,15 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE insertionHIndex = triangle.getHIndex();
   uintE insertionTriangle = triangle.total;
 
+  pid_t pid = getpid();
+  char statmf[64];
+  sprintf(statmf, "/proc/%d/statm", pid);
+  cout << "PATH: " << statmf << endl;
+  std::ifstream fin (statmf);
+
+  long sz, rss;
+  fin >> sz >> rss;
+
   if(!scriptMode) cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
@@ -256,6 +267,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
     cout << "Total Time: " << totalTime.get_total() << endl;
     cout << "Max RSS: " << resource.ru_maxrss << " KB" << endl;
+    cout << (sz * 4096) << " " << (rss * 4096) << endl;
   }
   else {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
