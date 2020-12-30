@@ -106,7 +106,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   // Mode activated for testing to more easily store output
   bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
-  //struct rusage resource;
+  struct rusage resource;
 
   if(!scriptMode) {
     std::cout << "### Application: Subgraph Counting" << std::endl;
