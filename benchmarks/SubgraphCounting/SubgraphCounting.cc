@@ -67,8 +67,7 @@ pbbs::sequence<std::pair<uintE,uintE>> getDeleteEdges(uintE V,uintE N,
 }
 
 pbbs::sequence<std::pair<uintE, uintE>> getEdges
-  (pbbs::sequence<std::pair<uintE, uintE>> edges,uintE N,pbbs::random& rand,bool sparcify = true) {
-  if(sparcify) edges = sparcifyEdges(edges,0,N - 1,rand);
+  (pbbs::sequence<std::pair<uintE, uintE>> edges) {
 
   auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>
     (edges.size(), [&] (size_t i) {
@@ -216,12 +215,12 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + 1) << endl;
     
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges),GA.n,rand
+      sparcifyEdges(barabasi_albert::generate_updates(nodes, edges),0,GA.n - 1,rand)
     );
 
     triangleTime.start();
     insertion.start();
-    triangle.addEdges(batch,true);
+    triangle.addEdges(batch);
     insertion.stop();
     triangleTime.stop();
     batch.clear();
@@ -239,10 +238,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   for (int i = 0; i < size;i++) {
     if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
-    cout << "hi " << i << endl; 
-    auto batch = getEdges(getDeleteEdges(GA.n,nodes,edges,rand,_dynG),GA.n,rand,false);
-    cout << batch.size() << endl;
-
+    auto batch = getEdges(getDeleteEdges(GA.n,nodes,edges,rand,_dynG));
     triangleTime.start();
     deletion.start();
     triangle.removeEdges(batch);
