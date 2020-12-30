@@ -168,7 +168,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
 
-  TriangleCounting triangle = TriangleCounting(h, false);
+  TriangleCounting triangle = TriangleCounting(h, useP);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
@@ -208,7 +208,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   staticTime.stop();
   uintE staticHIndex = triangle.getHIndex();
   uintE staticTriangle = triangle.total;
-  cout << "hi" << endl;
   if(!scriptMode) std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
   pbbs::random rand = pbbs::random();
 
