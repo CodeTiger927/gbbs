@@ -204,7 +204,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   // Add all edges from static graph
   staticTime.start();
-  triangle.addEdges(insertBatch,true);
+  triangle.addEdges(insertBatch);
   staticTime.stop();
   uintE staticHIndex = triangle.getHIndex();
   uintE staticTriangle = triangle.total;
