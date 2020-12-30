@@ -1,5 +1,5 @@
 #include "hindex_dyn_arr.h"
-#include "hindex_threshold.h"
+//#include "hindex_threshold.h"
 #include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
@@ -10,11 +10,8 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <vector>
+#include <unordered_set>
 
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 // Map the dense components to spread out throughout the graph
 pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
@@ -40,10 +37,38 @@ pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
   return res;
 }
 
+// V - Number of vertices in grpah
+// N - Selected vertices
+// E - Edges per node
+pbbs::sequence<std::pair<uintE,uintE>> getDeleteEdges(uintE V,uintE N,
+  uintE E,pbbs::random& rand,
+  dynamic_symmetric_graph<dynamic_symmetric_vertex, pbbs::empty>& dsg) {
+  std::vector<std::pair<uintE,uintE>> tmp;
+  std::unordered_set<uintE> selectedVertices;
+  uintE counter = 0;
+  uintE total = N * E;
+  while(tmp.size() < total) {
+    uintE cur = rand[counter++] % V;
+    while(selectedVertices.find(cur) != selectedVertices.end()) {
+      counter++;
+    }
+    auto entries = dsg.v_data.A[cur].neighbors.entries();
+    int ptr = 0;
+    for(int j = 0;j < std::min(dsg.v_data.A[cur].degree,E);++j) {
+      while(!std::get<1>(entries[ptr])) {
+        ptr++;
+      }
+      tmp.push_back({cur,std::get<0>(entries[ptr++])});
+    }
+  }
+  rand = rand.next();
+  return pbbs::sequence<std::pair<uintE, uintE>>(tmp.size(),[&](size_t i)
+    {return tmp[i];});
+}
+
 pbbs::sequence<std::pair<uintE, uintE>> getEdges
-  (pbbs::sequence<std::pair<uintE, uintE>> edges,uintE N) {
-  pbbs::random rand = pbbs::random();
-  edges = sparcifyEdges(edges,0,N - 1,rand);
+  (pbbs::sequence<std::pair<uintE, uintE>> edges,uintE N,pbbs::random& rand,bool sparcify = true) {
+  if(sparcify) edges = sparcifyEdges(edges,0,N - 1,rand);
 
   auto edgesOrdered = pbbs::sequence<std::pair<uintE, uintE>>
     (edges.size(), [&] (size_t i) {
@@ -101,12 +126,9 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE nodes = static_cast<uintE>(P.getOptionLongValue("-nodes", GA.n));
   //Barabasi_albert parameter - edges
   uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", GA.m / GA.n));
-  //Whether or not it uses the P partition
-  bool useP = static_cast<bool>(P.getOptionLongValue("-P",false));
   // Mode activated for testing to more easily store output
   bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
-  struct rusage resource;
 
   if(!scriptMode) {
     std::cout << "### Application: Subgraph Counting" << std::endl;
@@ -138,13 +160,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetDynArr(&_dynG);
     std::cout << "DYN_ARR VERSION\n" << std::endl;
   }
-  else if (type == 1) {
-    h = new HSetThreshold(&_dynG, GA.n);
+  //else if (type == 1) { //Temporarily disable threshold (needs work)
+    //h = new HSetThreshold(&_dynG, GA.n);
 
-    std::cout << "THRESHOLD VERSION\n" << std::endl;
-  }
+    //std::cout << "THRESHOLD VERSION\n" << std::endl;
+  //}
 
-  TriangleCounting triangle = TriangleCounting(h, useP);
+  TriangleCounting triangle = TriangleCounting(h, false);
   // Temporary for testing purposes. Initialize this to max node.
   triangle.initialize(GA.n + 1000);
 
@@ -170,7 +192,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     });
   });
 
-
   sequence<std::pair<uintE,uintE>> insertBatch = 
     filter(insertBatchtmp, [&](std::pair<uintE,uintE> p) {
       return (p.first != UINT_E_MAX || p.second != UINT_E_MAX);
@@ -181,24 +202,26 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
 
   // Add all edges from static graph
   staticTime.start();
-  triangle.addEdges(insertBatch);
+  triangle.addEdges(insertBatch,true);
   staticTime.stop();
   uintE staticHIndex = triangle.getHIndex();
   uintE staticTriangle = triangle.total;
+  cout << "hi" << endl;
   if(!scriptMode) std::cout << "Initial Triangle Count: " << triangle.total << std::endl;
-  insertionTotal.start();
+  pbbs::random rand = pbbs::random();
 
+  insertionTotal.start();
   //Add random edges
   for (int i = 0; i < size; i++) {
-    if (!scriptMode) cout << "Batch " << (i + 1) << endl;
+    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + 1) << endl;
     
     auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges),GA.n
+      barabasi_albert::generate_updates(nodes, edges),GA.n,rand
     );
 
     triangleTime.start();
     insertion.start();
-    triangle.addEdges(batch);
+    triangle.addEdges(batch,true);
     insertion.stop();
     triangleTime.stop();
     batch.clear();
@@ -208,27 +231,17 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE insertionHIndex = triangle.getHIndex();
   uintE insertionTriangle = triangle.total;
 
-  
-  pid_t pid = getpid();
-  char statmf[64];
-  sprintf(statmf, "/proc/%d/statm", pid);
-  std::ifstream fin (statmf);
-
-  long sz, rss;
-  fin >> sz >> rss;
-  
-
   if(!scriptMode) cout << "Triangles: " << triangle.total << endl;
 
   deletionTotal.start();
   
   //Delete random edges
   for (int i = 0; i < size;i++) {
-    if (!scriptMode) cout << "Batch " << (i + size + 1) << endl;
+    if (i % 10 == 0 && !scriptMode) cout << "Batch " << (i + size + 1) << endl;
     //Random number of vertices between 10^2 to 10^3, each with 100 edges
-    auto batch = getEdges(
-      barabasi_albert::generate_updates(nodes, edges),GA.n
-    );
+    cout << "hi " << i << endl; 
+    auto batch = getEdges(getDeleteEdges(GA.n,nodes,edges,rand,_dynG),GA.n,rand,false);
+    cout << batch.size() << endl;
 
     triangleTime.start();
     deletion.start();
@@ -242,6 +255,17 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE deletionTriangle = triangle.total;
   totalTime.stop();
 
+  if(!scriptMode) {
+    cout << "Triangles: " << triangle.total << endl;
+    cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
+    cout << "Actual Insertion Time: " << insertion.get_total() << endl;
+    cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Deletion Time: " << insertion.get_total() << endl;
+    cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
+    cout << "Total Time: " << totalTime.get_total() << endl;
+  }
+
   h->del();
 
   par_for(0, h->G->n, [&] (size_t i) {
@@ -254,29 +278,13 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   pbbslib::free_array(h->G->existVertices.A);
 
   triangle.del();
-
-  getrusage(RUSAGE_SELF, &resource);
-
-  if(!scriptMode) {
-    cout << "Triangles: " << triangle.total << endl;
-
-    cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
-    cout << "Actual Insertion Time: " << insertion.get_total() << endl;
-    cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
-    cout << "Actual Deletion Time: " << insertion.get_total() << endl;
-    cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
-    cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
-    cout << "Total Time: " << totalTime.get_total() << endl;
-    cout << "Max RSS: " << resource.ru_maxrss << " KB" << endl;
-    cout << "SIZE: " << (((double) sz) / 256) << " KB; RSS: " << (((double) rss) / 256) << " KB" << endl;
-  }
-  else {
+  
+  if(scriptMode) {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
-        << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
-        << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
-        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
-        << ", " << resource.ru_maxrss << (((double) sz) / 256) << ", "
-        << (((double) rss) / 256) << endl;
+    << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
+    << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
+    << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
+    << endl;
   }
 
   return 0;
