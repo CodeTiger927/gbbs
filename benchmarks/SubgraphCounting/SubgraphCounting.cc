@@ -51,8 +51,9 @@ pbbs::sequence<std::pair<uintE,uintE>> getDeleteEdges(uintE V,uintE N,
   while(tmp.size() < total) {
     uintE cur = rand[counter++] % V;
     while(selectedVertices.find(cur) != selectedVertices.end()) {
-      counter++;
+      cur = rand[counter++] % V;
     }
+    selectedVertices.insert(cur);
     auto entries = dsg.v_data.A[cur].neighbors.entries();
     int ptr = 0;
     for(int j = 0;j < std::min(dsg.v_data.A[cur].degree,E);++j) {
@@ -290,7 +291,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
     << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
     << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
-    << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
+    << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle << ", "
     << (((double) sz) / 256) << ", " << (((double) rss) / 256) << endl;
   }
 
