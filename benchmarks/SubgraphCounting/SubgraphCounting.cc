@@ -275,7 +275,8 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
         << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
         << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
         << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
-        << ", " << resource.ru_maxrss << endl;
+        << ", " << resource.ru_maxrss << (((double) sz) / 256) << ", "
+        << (((double) rss) / 256) << endl;
   }
 
   return 0;
