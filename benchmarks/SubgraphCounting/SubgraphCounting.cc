@@ -1,5 +1,5 @@
 #include "hindex_dyn_arr.h"
-//#include "hindex_threshold.h"
+#include "hindex_threshold.h"
 #include "TriangleCounting.h"
 #include "ligra/pbbslib/dyn_arr.h"
 #include "utils/generators/barabasi_albert.h"
@@ -11,6 +11,8 @@
 #include <assert.h>
 #include <vector>
 
+#include <sys/time.h>
+#include <sys/resource.h>
 
 // Map the dense components to spread out throughout the graph
 pbbs::sequence<std::pair<uintE, uintE>> sparcifyEdges
@@ -97,9 +99,12 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE nodes = static_cast<uintE>(P.getOptionLongValue("-nodes", GA.n));
   //Barabasi_albert parameter - edges
   uintE edges = static_cast<uintE>(P.getOptionLongValue("-edges", GA.m / GA.n));
+  //Whether or not it uses the P partition
+  bool useP = static_cast<bool>(P.getOptionLongValue("-P",false));
   // Mode activated for testing to more easily store output
   bool scriptMode = static_cast<bool>(P.getOptionLongValue("-scriptMode",false));
 
+  struct rusage resource;
 
   if(!scriptMode) {
     std::cout << "### Application: Subgraph Counting" << std::endl;
@@ -131,11 +136,11 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     h = new HSetDynArr(&_dynG);
     std::cout << "DYN_ARR VERSION\n" << std::endl;
   }
-  //else if (type == 1) { //Temporarily disable threshold (needs work)
-    //h = new HSetThreshold(&_dynG, GA.n);
+  else if (type == 1) {
+    h = new HSetThreshold(&_dynG, GA.n);
 
-    //std::cout << "THRESHOLD VERSION\n" << std::endl;
-  //}
+    std::cout << "THRESHOLD VERSION\n" << std::endl;
+  }
 
   TriangleCounting triangle = TriangleCounting(h, false);
   // Temporary for testing purposes. Initialize this to max node.
@@ -225,17 +230,6 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   uintE deletionTriangle = triangle.total;
   totalTime.stop();
 
-  if(!scriptMode) {
-    cout << "Triangles: " << triangle.total << endl;
-    cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
-    cout << "Actual Insertion Time: " << insertion.get_total() << endl;
-    cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
-    cout << "Actual Deletion Time: " << insertion.get_total() << endl;
-    cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
-    cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
-    cout << "Total Time: " << totalTime.get_total() << endl;
-  }
-
   h->del();
 
   par_for(0, h->G->n, [&] (size_t i) {
@@ -248,13 +242,27 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   pbbslib::free_array(h->G->existVertices.A);
 
   triangle.del();
-  
-  if(scriptMode) {
+
+  getrusage(RUSAGE_SELF, &resource);
+
+  if(!scriptMode) {
+    cout << "Triangles: " << triangle.total << endl;
+
+    cout << "Inserting Static Graph time: " << staticTime.get_total() << endl;
+    cout << "Actual Insertion Time: " << insertion.get_total() << endl;
+    cout << "Total Insertion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Deletion Time: " << insertion.get_total() << endl;
+    cout << "Total Deletion Time: " << insertionTotal.get_total() << endl;
+    cout << "Actual Counting Time: " << triangleTime.get_total() << endl;
+    cout << "Total Time: " << totalTime.get_total() << endl;
+    cout << "Max RSS: " << resource.ru_maxrss << " KB" << endl;
+  }
+  else {
       cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
-    << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
-    << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
-    << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
-    << endl;
+        << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
+        << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
+        << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle
+        << ", " << resource.ru_maxrss << endl;
   }
 
   return 0;

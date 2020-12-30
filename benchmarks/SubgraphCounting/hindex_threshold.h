@@ -676,6 +676,24 @@ class HSetThreshold : public HSet {
     }
 
     /**
+     * Returns a sequence with all of the vertices in P
+     * Vertices greater than 2h
+     *
+     * @return sequence of all the vertices in P
+     */
+    pbbs::sequence<uintE> getP() {
+      auto hSeq = getH();
+
+      auto f = [&] (uintE v) { 
+        return this->G->get_vertex(v).degree >= 2 * hindex;
+      };
+      auto pSeq = pbbs::filter(hSeq, f);
+      return pSeq;
+    }
+
+    
+
+    /**
      * Frees all data structures used in HSet
      */
     void del() {

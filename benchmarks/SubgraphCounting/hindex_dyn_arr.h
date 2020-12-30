@@ -765,51 +765,18 @@ class HSetDynArr : public HSet {
     }
 
     /**
-     * Returns a sequence with all of the vertices in H
+     * Returns a sequence with all of the vertices in P
+     * Vertices greater than 2h
      *
-     * @return sequence of all the vertices in H
+     * @return sequence of all the vertices in P
      */
     pbbs::sequence<uintE> getP() {
+      auto hSeq = getH();
 
-      cout << hindex << " " << C.size << endl;
-
-      //Return empty sequence if there are no vertices above 2 * h
-      if (this->hindex == 0 || C.size < 2 * hindex) {
-        return pbbs::sequence<uintE>(0);
-      }
-
-      //Find the size of each entry in C
-      auto prefixSum = pbbs::sequence<uintE>(C.size - 2 * hindex);
-      par_for(0, prefixSum.size(), [&] (size_t i) {
-        if (C.A[2 * this->hindex + i] != nullptr) {
-          prefixSum[i] = C.A[2 * this->hindex + i]->size;
-        }
-        else prefixSum[i] = 0;
-      });
-
-      for (int i = 0; i < prefixSum.size(); i++)  cout << prefixSum[i] << endl;
-
-      //Take exclusive prefix sum to find where each block of
-      //  same degree vertices start
-
-      uintE total = prefixSum[prefixSum.size() - 1];
-      pbbslib::scan_add_inplace(prefixSum);
-
-      total += prefixSum[prefixSum.size() - 1];
-      pbbs::sequence<uintE> pSeq = pbbs::sequence<uintE>(total); //Should be the last size of prefix sum
-cout << "A" << endl;
-      //Add rest of vertices (using the prefix sum to find where they go)
-      //par_for(0, prefixSum.size(), [&] (size_t i) {
-for (int i = 0; i < prefixSum.size(); i++) {
-        if (2 * hindex + 1 < C.size && C.A[2 * this->hindex + i] != nullptr) {
-          uintE offSet = prefixSum[i];
-          //par_for(0, C.A[2 * this->hindex + i]->size, [&] (size_t j) {
-for (int j = 0; j < C.A[2 * this->hindex + i]->size; j++) {
-            pSeq[j + offSet] = C.A[this->hindex + i]->A[j];
-          }//);
-        }
-      }//);
-cout << "A" << endl;
+      auto f = [&] (uintE v) { 
+        return this->G->get_vertex(v).degree >= 2 * hindex;
+      };
+      auto pSeq = pbbs::filter(hSeq, f);
       return pSeq;
     }
 
