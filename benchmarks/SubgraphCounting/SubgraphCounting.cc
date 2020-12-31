@@ -288,7 +288,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
   triangle.del();
   
   if(scriptMode) {
-      cout << type << ", " << size << ", " << nodes << ", " << edges << ", " 
+      cout << type  << ", " << useP << ", " << size << ", " << nodes << ", " << edges << ", " 
     << staticTime.get_total() << ", " << insertionTotal.get_total() << ", "
     << deletionTotal.get_total() << ", " << totalTime.get_total() << ", "
     << staticTriangle << ", " << insertionTriangle << ", " << deletionTriangle << ", "
