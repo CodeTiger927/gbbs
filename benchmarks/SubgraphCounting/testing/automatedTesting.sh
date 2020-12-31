@@ -6,7 +6,7 @@
 
 timestamp=`date +%y%m%d%H%M%S`
 fname="../inputs/graph_test_DBLP.txt"
-types=(0)
+types=(1)
 nodes=20000
 parameter2=(5)
 batchesSize=(10, 20, 30, 40, 50)
