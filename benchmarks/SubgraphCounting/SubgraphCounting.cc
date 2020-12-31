@@ -164,7 +164,7 @@ double AppSubgraphCounting_runner(Graph& GA, commandLine P) {
     std::cout << "DYN_ARR VERSION\n" << std::endl;
   }
   else if (type == 1) {
-    h = new HSetThreshold(&_dynG, GA.n / 2);
+    h = new HSetThreshold(&_dynG, GA.n / 3);
 
     std::cout << "THRESHOLD VERSION\n" << std::endl;
   }
